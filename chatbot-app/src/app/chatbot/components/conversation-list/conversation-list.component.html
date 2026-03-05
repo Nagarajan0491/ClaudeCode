@@ -1,0 +1,31 @@
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h2 class="sidebar-title">Conversations</h2>
+    <button (click)="newConversation.emit()" class="new-chat-btn" title="New conversation">
+      + New
+    </button>
+  </div>
+
+  <div class="conversation-list">
+    <div
+      *ngFor="let conv of conversations"
+      class="conversation-item"
+      [class.active]="conv.id === selectedId"
+      (click)="select(conv)"
+    >
+      <div class="conv-info">
+        <span class="conv-title">{{ conv.title }}</span>
+        <span class="conv-date">{{ formatDate(conv.updatedAt) }}</span>
+      </div>
+      <button
+        class="delete-btn"
+        (click)="delete($event, conv.id)"
+        title="Delete conversation"
+      >✕</button>
+    </div>
+
+    <div *ngIf="conversations.length === 0" class="empty-state">
+      No conversations yet.<br>Click "+ New" to start.
+    </div>
+  </div>
+</div>

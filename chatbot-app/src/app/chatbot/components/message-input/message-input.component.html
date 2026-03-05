@@ -1,0 +1,28 @@
+<div class="input-container">
+  <div class="textarea-wrapper">
+    <textarea
+      #textArea
+      [(ngModel)]="content"
+      (keydown)="onKeyDown($event)"
+      (input)="autoResize()"
+      [disabled]="isLoading"
+      placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+      rows="1"
+      class="message-textarea"
+    ></textarea>
+  </div>
+  <div class="input-footer">
+    <span class="char-count" [class.over-limit]="isOverLimit">
+      {{ charCount }}/{{ maxLength }}
+    </span>
+    <button
+      (click)="send()"
+      [disabled]="!canSend"
+      class="send-button"
+      title="Send message"
+    >
+      <span *ngIf="!isLoading">Send ➤</span>
+      <span *ngIf="isLoading">...</span>
+    </button>
+  </div>
+</div>

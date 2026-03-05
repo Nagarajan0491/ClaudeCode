@@ -1,0 +1,71 @@
+.input-container {
+  padding: 12px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+}
+
+.textarea-wrapper {
+  width: 100%;
+}
+
+.message-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+  overflow-y: auto;
+  max-height: 160px;
+}
+
+.message-textarea:focus {
+  border-color: #3b82f6;
+}
+
+.message-textarea:disabled {
+  background: #f9fafb;
+  cursor: not-allowed;
+}
+
+.input-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.char-count {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.char-count.over-limit {
+  color: #ef4444;
+  font-weight: bold;
+}
+
+.send-button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.send-button:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.send-button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}

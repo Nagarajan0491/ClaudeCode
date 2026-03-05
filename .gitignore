@@ -1,0 +1,17 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Angular
+chatbot-app/node_modules/
+chatbot-app/dist/
+
+# Env / secrets
+appsettings.Development.json
+
+# OS
+.DS_Store
+Thumbs.db

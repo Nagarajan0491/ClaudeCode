@@ -1,0 +1,64 @@
+<div class="chatbot-container">
+  <!-- Sidebar -->
+  <div class="sidebar-wrapper" [class.sidebar-open]="sidebarOpen">
+    <app-conversation-list
+      [conversations]="conversations"
+      [selectedId]="selectedConversation?.id ?? null"
+      (conversationSelected)="selectConversation($event)"
+      (conversationDeleted)="deleteConversation($event)"
+      (newConversation)="createConversation()"
+    ></app-conversation-list>
+  </div>
+
+  <!-- Main chat area -->
+  <div class="chat-area">
+    <!-- Header -->
+    <div class="chat-header">
+      <button class="toggle-sidebar-btn" (click)="toggleSidebar()" title="Toggle sidebar">
+        ☰
+      </button>
+      <h1 class="chat-title">
+        {{ selectedConversation?.title || 'AI Chatbot' }}
+      </h1>
+    </div>
+
+    <!-- Messages -->
+    <div class="messages-container" *ngIf="selectedConversation; else noConversation">
+      <div class="messages-scroll">
+        <div *ngIf="messages.length === 0" class="welcome-message">
+          <div class="welcome-icon">🤖</div>
+          <h2>Hello! How can I help you today?</h2>
+          <p>Type a message below to start chatting.</p>
+        </div>
+
+        <app-message-item
+          *ngFor="let message of messages"
+          [message]="message"
+        ></app-message-item>
+
+        <app-typing-indicator [isVisible]="isLoading"></app-typing-indicator>
+
+        <div #messagesEnd></div>
+      </div>
+    </div>
+
+    <ng-template #noConversation>
+      <div class="no-conversation">
+        <div class="no-conv-content">
+          <div class="no-conv-icon">💬</div>
+          <h2>No conversation selected</h2>
+          <p>Select an existing conversation or create a new one to begin.</p>
+          <button (click)="createConversation()" class="start-btn">Start New Chat</button>
+        </div>
+      </div>
+    </ng-template>
+
+    <!-- Input -->
+    <div *ngIf="selectedConversation" class="input-wrapper">
+      <app-message-input
+        [isLoading]="isLoading"
+        (messageSent)="sendMessage($event)"
+      ></app-message-input>
+    </div>
+  </div>
+</div>

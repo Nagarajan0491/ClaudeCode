@@ -1,0 +1,9 @@
+<div class="message-wrapper" [class.user-message]="isUser" [class.bot-message]="!isUser">
+  <div class="avatar">{{ isUser ? '🧑' : '🤖' }}</div>
+  <div class="message-content">
+    <div class="bubble" [class.user-bubble]="isUser" [class.bot-bubble]="!isUser">
+      <p class="message-text" [innerHTML]="message.content"></p>
+    </div>
+    <span class="timestamp">{{ formattedTime }}</span>
+  </div>
+</div>
