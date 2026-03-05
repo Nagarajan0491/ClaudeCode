@@ -5,6 +5,7 @@ import { Conversation } from '../../models/conversation.interface';
 import { Message } from '../../models/message.interface';
 import { ChatService } from '../../services/chat.service';
 import { ConversationService } from '../../services/conversation.service';
+import { MessageInputComponent } from '../message-input/message-input.component';
 
 @Component({
   selector: 'app-chatbot',
@@ -14,6 +15,7 @@ import { ConversationService } from '../../services/conversation.service';
 })
 export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('messagesEnd') messagesEnd!: ElementRef;
+  @ViewChild(MessageInputComponent) messageInput?: MessageInputComponent;
 
   conversations: Conversation[] = [];
   selectedConversation: Conversation | null = null;
@@ -36,6 +38,7 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
       .pipe(takeUntil(this.destroy$))
       .subscribe(convs => {
         this.conversations = convs;
+        this.cdr.detectChanges();
         if (!this.selectedConversation && convs.length > 0) {
           this.selectConversation(convs[0]);
         }
@@ -60,22 +63,32 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   selectConversation(conversation: Conversation): void {
     this.selectedConversation = conversation;
+    this.messageInput?.reset();
     if (conversation.messageCount === 0) {
       this.messages = [];
       return;
     }
+    const targetId = conversation.id;
     this.conversationService.getConversation(conversation.id).subscribe({
       next: (conv) => {
+        if (this.selectedConversation?.id !== targetId) return;
         this.messages = conv.messages || [];
         this.shouldScrollToBottom = true;
+        this.cdr.detectChanges();
       },
-      error: () => this.showError('Failed to load conversation messages.')
+      error: () => {
+        if (this.selectedConversation?.id !== targetId) return;
+        this.showError('Failed to load conversation messages.');
+      }
     });
   }
 
   createConversation(): void {
     this.conversationService.createConversation().subscribe({
-      next: (conv) => this.selectConversation(conv),
+      next: (conv) => {
+        this.selectConversation(conv);
+        setTimeout(() => this.messageInput?.focus(), 0);
+      },
       error: () => this.showError('Failed to create new conversation.')
     });
   }
@@ -103,9 +116,10 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
       return;
     }
 
+    const conversationId = this.selectedConversation.id;
     const userMessage: Message = {
       id: Date.now(),
-      conversationId: this.selectedConversation.id,
+      conversationId,
       role: 'user',
       content,
       inputMethod: 'text',
@@ -115,8 +129,9 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.isLoading = true;
     this.shouldScrollToBottom = true;
 
-    this.chatService.sendMessage(this.selectedConversation.id, content).subscribe({
+    this.chatService.sendMessage(conversationId, content).subscribe({
       next: (response) => {
+        if (this.selectedConversation?.id !== conversationId) return;
         const assistantMessage: Message = {
           id: response.id,
           conversationId: response.conversationId,
@@ -132,6 +147,7 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
         setTimeout(() => this.conversationService.getConversations().subscribe(), 0);
       },
       error: (err) => {
+        if (this.selectedConversation?.id !== conversationId) return;
         this.isLoading = false;
         this.messages.pop();
         const errorMsg = err.status === 503

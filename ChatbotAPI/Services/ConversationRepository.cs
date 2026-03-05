@@ -19,6 +19,7 @@ public class ConversationRepository : IConversationRepository
     public async Task<IEnumerable<Conversation>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Conversations
+            .Include(c => c.Messages)
             .OrderByDescending(c => c.UpdatedAt)
             .ToListAsync(cancellationToken);
     }

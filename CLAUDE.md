@@ -88,14 +88,23 @@ ng lint                               # ESLint
 - Uses **NgModule** (not standalone) — new components must have `standalone: false` in `@Component` decorator explicitly
 - `app.ts` / `app-module.ts` (not `app.component.ts` / `app.module.ts`) — Angular 21 changed default file naming
 - All components declared in `src/app/app-module.ts`
+- **`zone.js` is NOT listed in `package.json`** — this project runs without automatic zone-based change detection. Always call `this.cdr.detectChanges()` explicitly after any async operation that updates component state (`this.conversations`, `this.messages`, etc.). Failing to do so means the template will not re-render even though data is correct.
+- `app.html` is the default Angular scaffold placeholder — it is **not used**. `app.ts` uses an inline `template: '<app-chatbot></app-chatbot>'`.
+- `src/environments/environment.ts` — `apiUrl: 'http://localhost:5112'` (actual running port, not 5000 as stated elsewhere)
 
 **Data flow:** `chatbot.component.ts` (container) → `ConversationService` (BehaviorSubject state) + `ChatService` (HTTP) → backend API
 
 - `chatbot/services/conversation.service.ts` — owns the reactive conversation list (`BehaviorSubject<Conversation[]>`); all CRUD goes through here so the sidebar auto-updates
 - `chatbot/services/chat.service.ts` — `sendMessage()` (HTTP POST) and `streamMessage()` (EventSource SSE)
 - `interceptors/error.interceptor.ts` — catches `status === 0` (network unreachable) and shows `MatSnackBar` toast
-- `src/environments/environment.ts` — `apiUrl: 'http://localhost:5000'` (dev); production uses `apiUrl: '/api'`
-- Proxy config in `proxy.conf.json` routes `/api/*` → `localhost:5000` during `ng serve`
+- `src/environments/environment.ts` — `apiUrl: 'http://localhost:5112'` (dev); production uses `apiUrl: '/api'`
+- Proxy config in `proxy.conf.json` routes `/api/*` → `localhost:5112` during `ng serve`
+
+**Known bugs fixed (session Mar 2026):**
+- `selectConversation`: `!conversation.messageCount` was truthy for `undefined` — changed to `=== 0` so messages load even when `messageCount` is missing
+- `sendMessage`: missing conversation-ID guard in async callbacks — response from a stale in-flight request was pushed to the wrong conversation's `messages` array; fixed by capturing `conversationId` before the call and guarding `next`/`error` callbacks
+- `MessageInputComponent`: `content` was not cleared on conversation switch (component is reused, not destroyed); added `reset()` method called from `selectConversation`
+- `cdr.detectChanges()` missing after `this.conversations = convs` (in `conversations$` subscriber) and after `this.messages = conv.messages` (in `selectConversation` next handler) — template was not re-rendering due to zoneless environment
 
 ## API Contract
 

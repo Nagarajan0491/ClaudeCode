@@ -42,6 +42,15 @@ export class MessageInputComponent {
     this.autoResize();
   }
 
+  focus(): void {
+    this.textAreaRef?.nativeElement.focus();
+  }
+
+  reset(): void {
+    this.content = '';
+    this.autoResize();
+  }
+
   autoResize(): void {
     const ta = this.textAreaRef?.nativeElement;
     if (!ta) return;

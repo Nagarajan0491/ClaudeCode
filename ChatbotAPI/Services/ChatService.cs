@@ -47,12 +47,13 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(userMessage, cancellationToken);
 
-        // Build message list for Ollama /api/chat
+        // Build message list for Ollama /api/chat (cap history to last 10 messages to avoid growing slowness)
+        var historyLimit = _configuration.GetValue<int>("Ollama:HistoryLimit", 10);
         var messages = new List<ChatMessage>
         {
             new("system", "You are a helpful AI assistant. Be concise, accurate, and friendly.")
         };
-        foreach (var msg in conversation.Messages.OrderBy(m => m.Timestamp))
+        foreach (var msg in conversation.Messages.OrderBy(m => m.Timestamp).TakeLast(historyLimit))
             messages.Add(new ChatMessage(msg.Role, msg.Content));
         messages.Add(new ChatMessage("user", request.Content));
 
@@ -99,11 +100,12 @@ public class ChatService : IChatService
         var conversation = await _conversationRepository.GetByIdAsync(conversationId, cancellationToken)
             ?? throw new ConversationNotFoundException(conversationId);
 
+        var historyLimit = _configuration.GetValue<int>("Ollama:HistoryLimit", 10);
         var messages = new List<ChatMessage>
         {
             new("system", "You are a helpful AI assistant. Be concise, accurate, and friendly.")
         };
-        foreach (var msg in conversation.Messages.OrderBy(m => m.Timestamp))
+        foreach (var msg in conversation.Messages.OrderBy(m => m.Timestamp).TakeLast(historyLimit))
             messages.Add(new ChatMessage(msg.Role, msg.Content));
         messages.Add(new ChatMessage("user", message));
 
