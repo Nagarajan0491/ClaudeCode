@@ -32,6 +32,12 @@ public class ExceptionHandlingMiddleware
         var (statusCode, message) = ex switch
         {
             OllamaConnectionException => (HttpStatusCode.ServiceUnavailable, ex.Message),
+            GeminiConnectionException gce
+                when gce.InnerStatusCode is System.Net.HttpStatusCode.Forbidden
+                  or System.Net.HttpStatusCode.Unauthorized
+                => (HttpStatusCode.Unauthorized,
+                    "Gemini API key is invalid or not authorized. Check the Gemini:ApiKey setting."),
+
             GeminiConnectionException => (HttpStatusCode.ServiceUnavailable, ex.Message),
             ConversationNotFoundException => (HttpStatusCode.NotFound, ex.Message),
             InvalidMessageException => (HttpStatusCode.BadRequest, ex.Message),

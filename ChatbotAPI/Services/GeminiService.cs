@@ -24,7 +24,8 @@ public class GeminiService : IAIProvider
         }
         catch (Exception ex) when (ex is not GeminiConnectionException)
         {
-            throw new GeminiConnectionException("Failed to get response from Gemini API.", ex);
+            var statusCode = (ex as Microsoft.SemanticKernel.HttpOperationException)?.StatusCode;
+            throw new GeminiConnectionException("Failed to get response from Gemini API.", ex, statusCode);
         }
     }
 
