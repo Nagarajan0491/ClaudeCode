@@ -19,7 +19,8 @@ export class SdkChatService {
         signal: controller.signal
       }).then(async response => {
         if (!response.ok) { observer.error(new Error(`HTTP ${response.status}`)); return; }
-        const reader = response.body!.getReader();
+        if (!response.body) { observer.error(new Error('No response body')); return; }
+        const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
 

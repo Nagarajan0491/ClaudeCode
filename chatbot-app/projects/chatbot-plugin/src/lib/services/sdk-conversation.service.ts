@@ -27,4 +27,18 @@ export class SdkConversationService {
   getConversationId(): number | null {
     return this.conversationId;
   }
+
+  setConversationId(id: number | null): void {
+    this.conversationId = id;
+  }
+
+  listConversations(): Observable<Array<{ id: number; title: string; updatedAt: string }>> {
+    return this.http.get<Array<{ id: number; title: string; updatedAt: string }>>(
+      `${this.config.apiUrl}/api/conversations`
+    );
+  }
+
+  loadConversation(id: number): Observable<any> {
+    return this.http.get<any>(`${this.config.apiUrl}/api/conversations/${id}`);
+  }
 }

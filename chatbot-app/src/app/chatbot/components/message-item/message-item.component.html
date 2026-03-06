@@ -10,20 +10,26 @@
         (click)="playMessage()"
         [disabled]="isPlaying"
         class="ctrl-btn"
-        title="Play"
-      >▶</button>
+        title="Play message"
+      >
+        <mat-icon>play_arrow</mat-icon>
+      </button>
       <button
         (click)="pauseMessage()"
         [disabled]="!isPlaying"
         class="ctrl-btn"
         title="Pause"
-      >⏸</button>
+      >
+        <mat-icon>pause</mat-icon>
+      </button>
       <button
         (click)="stopMessage()"
         [disabled]="!isPlaying && !isPaused"
         class="ctrl-btn"
         title="Stop"
-      >⏹</button>
+      >
+        <mat-icon>stop</mat-icon>
+      </button>
     </div>
     <span *ngIf="!message.isStreaming" class="timestamp">{{ formattedTime }}</span>
   </div>

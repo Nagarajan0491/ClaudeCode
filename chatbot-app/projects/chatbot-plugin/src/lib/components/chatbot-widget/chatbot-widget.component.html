@@ -5,7 +5,12 @@
 
   <div class="cp-panel cp-panel--floating" *ngIf="isOpen">
     <div class="cp-panel__header">
-      <span class="cp-panel__title">{{ title }}</span>
+      <div class="cp-panel__header-left">
+        <button class="cp-panel__sidebar-toggle" (click)="toggleSidebar()" title="Chat History">
+          <mat-icon>history</mat-icon>
+        </button>
+        <span class="cp-panel__title">{{ title }}</span>
+      </div>
       <button class="cp-panel__close" (click)="toggleOpen()"><mat-icon>close</mat-icon></button>
     </div>
     <ng-container *ngTemplateOutlet="chatBody"></ng-container>
@@ -14,15 +19,40 @@
 
 <div class="cp-panel cp-panel--inline" *ngIf="!isFloating">
   <div class="cp-panel__header">
-    <span class="cp-panel__title">{{ title }}</span>
+    <div class="cp-panel__header-left">
+      <button class="cp-panel__sidebar-toggle" (click)="toggleSidebar()" title="Chat History">
+        <mat-icon>history</mat-icon>
+      </button>
+      <span class="cp-panel__title">{{ title }}</span>
+    </div>
   </div>
   <ng-container *ngTemplateOutlet="chatBody"></ng-container>
 </div>
 
 <ng-template #chatBody>
-  <div class="cp-messages">
-    <cp-message-item *ngFor="let msg of messages; trackBy: trackById" [message]="msg"></cp-message-item>
-    <cp-typing-indicator *ngIf="isLoading"></cp-typing-indicator>
+  <div class="cp-body">
+    <div class="cp-sidebar" *ngIf="isSidebarOpen">
+      <div class="cp-sidebar__header">History</div>
+      <button class="cp-sidebar__new-btn" (click)="startNewChat()">+ New Chat</button>
+      <div class="cp-sidebar__list">
+        <ng-container *ngIf="conversations.length > 0; else noHistory">
+          <div class="cp-sidebar__item"
+               *ngFor="let conv of conversations"
+               [class.cp-sidebar__item--active]="conv.id === activeConvId"
+               (click)="selectConversation(conv.id)">
+            <span class="cp-sidebar__item-title">{{ conv.title || 'Untitled' }}</span>
+            <span class="cp-sidebar__item-date">{{ conv.updatedAt | date:'shortDate' }}</span>
+          </div>
+        </ng-container>
+        <ng-template #noHistory>
+          <div class="cp-sidebar__empty">No history yet</div>
+        </ng-template>
+      </div>
+    </div>
+    <div class="cp-messages" #messagesContainer>
+      <cp-message-item *ngFor="let msg of messages; trackBy: trackById" [message]="msg"></cp-message-item>
+      <cp-typing-indicator *ngIf="isLoading && !hasStreamingMessage"></cp-typing-indicator>
+    </div>
   </div>
   <cp-message-input [disabled]="isLoading" (sendMessage)="sendMessage($event)"></cp-message-input>
 </ng-template>

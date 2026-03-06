@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, Inject } from '@angular/core';
+import { Component, Input, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, Inject, ViewChild, ElementRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { SdkMessage } from '../../models/sdk-message.interface';
 import { ActionRegistryService } from '../../services/action-registry.service';
@@ -18,6 +18,7 @@ import { PluginConfig } from '../../models/plugin-config.interface';
 export class ChatbotWidgetComponent implements OnInit, OnDestroy {
   @Input() context: Record<string, string> = {};
   @Input() theme: 'floating' | 'inline' = 'floating';
+  @ViewChild('messagesContainer') messagesContainer?: ElementRef<HTMLElement>;
 
   messages: SdkMessage[] = [];
   isLoading = false;
@@ -27,6 +28,10 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
 
   get title(): string { return this.config.title ?? 'AI Assistant'; }
   get isFloating(): boolean { return this.theme === 'floating'; }
+  get hasStreamingMessage(): boolean { return this.messages.some(m => m.isStreaming); }
+
+  isSidebarOpen = false;
+  conversations: Array<{ id: number; title: string; updatedAt: string }> = [];
 
   constructor(
     private cdr: ChangeDetectorRef,
@@ -42,6 +47,50 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void { this.subs.unsubscribe(); }
+
+  toggleSidebar(): void {
+    this.isSidebarOpen = !this.isSidebarOpen;
+    if (this.isSidebarOpen) this.loadConversations();
+    this.cdr.detectChanges();
+  }
+
+  loadConversations(): void {
+    const sub = this.conversationService.listConversations().subscribe({
+      next: (list) => { this.conversations = list; this.cdr.detectChanges(); },
+      error: () => { /* silent */ }
+    });
+    this.subs.add(sub);
+  }
+
+  selectConversation(id: number): void {
+    if (this.isLoading) return;
+    const sub = this.conversationService.loadConversation(id).subscribe({
+      next: (conv) => {
+        this.conversationService.setConversationId(conv.id);
+        this.messages = (conv.messages || []).map((m: any, i: number) => ({
+          id: -(i + 1000),
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+          inputMethod: m.inputMethod || 'text',
+          timestamp: m.timestamp,
+          isStreaming: false,
+          isError: false
+        }));
+        this.cdr.detectChanges();
+        this.scrollToBottom();
+      },
+      error: () => { /* silent */ }
+    });
+    this.subs.add(sub);
+  }
+
+  startNewChat(): void {
+    this.conversationService.setConversationId(null);
+    this.messages = [];
+    this.cdr.detectChanges();
+  }
+
+  get activeConvId(): number | null { return this.conversationService.getConversationId(); }
 
   toggleOpen(): void {
     this.isOpen = !this.isOpen;
@@ -91,7 +140,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
             this.updateMessage(placeholderId, accumulated, true);
           },
           error: (err: Error) => {
-            this.updateMessage(placeholderId, `Error: ${err.message}`, false, true);
+            this.updateMessage(placeholderId, `An error occurred. Please try again.`, false, true);
             this.isLoading = false;
             this.cdr.detectChanges();
           },
@@ -106,7 +155,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
         this.addMessage({
           id: this.nextId--,
           role: 'assistant',
-          content: `Error: ${err.message}`,
+          content: `An error occurred. Please try again.`,
           inputMethod: 'text',
           timestamp: new Date().toISOString(),
           isError: true
@@ -146,7 +195,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
 
   private feedbackToAI(placeholderId: number, feedback: string): void {
     this.updateMessage(placeholderId, '', true);
-    this.conversationService.ensureConversation().subscribe(conversationId => {
+    const sub = this.conversationService.ensureConversation().subscribe(conversationId => {
       const descriptors = this.actionRegistry.getActionDescriptors();
       const request = {
         conversationId,
@@ -156,13 +205,13 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
         hostActions: descriptors.length > 0 ? descriptors : undefined
       };
       let accumulated = '';
-      this.sdkChat.streamSdkMessage(request).subscribe({
+      const streamSub = this.sdkChat.streamSdkMessage(request).subscribe({
         next: (chunk) => {
           accumulated += chunk;
           this.updateMessage(placeholderId, accumulated, true);
         },
         error: (err: Error) => {
-          this.updateMessage(placeholderId, `Error: ${err.message}`, false, true);
+          this.updateMessage(placeholderId, `An error occurred. Please try again.`, false, true);
           this.isLoading = false;
           this.cdr.detectChanges();
         },
@@ -176,12 +225,15 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         }
       });
+      this.subs.add(streamSub);
     });
+    this.subs.add(sub);
   }
 
   private addMessage(msg: SdkMessage): void {
     this.messages = [...this.messages, msg];
     this.cdr.detectChanges();
+    this.scrollToBottom();
   }
 
   private updateMessage(id: number, content: string, isStreaming: boolean, isError = false): void {
@@ -189,5 +241,13 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
       m.id === id ? { ...m, content, isStreaming, isError } : m
     );
     this.cdr.detectChanges();
+    this.scrollToBottom();
+  }
+
+  private scrollToBottom(): void {
+    if (this.messagesContainer) {
+      const el = this.messagesContainer.nativeElement;
+      el.scrollTop = el.scrollHeight;
+    }
   }
 }

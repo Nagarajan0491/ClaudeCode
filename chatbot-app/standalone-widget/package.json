@@ -1,0 +1,23 @@
+{
+  "name": "chatbot-widget-standalone",
+  "version": "1.0.0",
+  "description": "Standalone chatbot widget - works with any framework (Angular 9+, React, Vue, vanilla JS)",
+  "main": "dist/chatbot-widget.min.js",
+  "scripts": {
+    "build": "node build.js",
+    "serve": "npx http-server . -p 8080"
+  },
+  "keywords": [
+    "chatbot",
+    "web-component",
+    "angular",
+    "react",
+    "vue",
+    "standalone"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "terser": "^5.16.0"
+  }
+}

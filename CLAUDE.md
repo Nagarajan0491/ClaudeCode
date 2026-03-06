@@ -13,8 +13,9 @@ PostgreSQL. The chatbot is also embeddable as a plugin in other Angular apps via
 ChatbotSystem/
 ├── ChatbotAPI/                  ← .NET 8 Web API (port 5112)
 ├── chatbot-app/                 ← Angular 21 frontend (port 4200)
-│   └── projects/chatbot-plugin/ ← Embeddable Angular library (SDK)
-└── dist/chatbot-plugin/         ← Built library output (ng build chatbot-plugin)
+│   ├── projects/chatbot-plugin/ ← Embeddable Angular library (SDK)
+│   ├── standalone-widget/       ← Framework-agnostic Web Component (vanilla JS)
+│   └── dist/chatbot-plugin/     ← Built library output (ng build chatbot-plugin)
 ```
 
 ## Prerequisites
@@ -99,6 +100,15 @@ before validation, so the rest of the app reads the key from config only.
 - `Services/GeminiService.cs` — Uses Semantic Kernel `IChatCompletionService` registered via
   `AddGoogleAIGeminiChatCompletion`. Converts `ChatMessage` list to Semantic Kernel `ChatHistory`.
 
+### Phase 3 — Server-Side Plugin Service
+
+- `Services/Interfaces/IPluginService.cs` — interface for plugin management and execution.
+- `Services/PluginService.cs` — full CRUD on `PluginRegistrations` table; `ExecuteAsync()` calls
+  plugin HTTP endpoints (GET/POST/PUT) with optional Bearer token auth; `TryAutoInvokeAsync()`
+  parses `plugin_call` JSON emitted by the AI, looks up the matching active plugin by name, and
+  executes it automatically.
+- `Controllers/PluginsController.cs` — REST API for managing and executing registered plugins.
+
 ### Middleware
 
 - `Middleware/ExceptionHandlingMiddleware.cs` — centralised error→HTTP status mapping
@@ -125,9 +135,12 @@ needed for day-to-day development.
 - `Messages` — id, conversationId (cascade delete), role ("user"/"assistant"), content,
   inputMethod ("text"/"voice"), timestamp
 
-**Stub tables (Phase 3 / Phase 4 forward-compatibility):**
-- `PluginRegistrations`, `DataSources`, `RegisteredActions` — schema exists, not yet used by any
-  service logic.
+**Phase 3 tables (server-side plugins — active):**
+- `PluginRegistrations` — fully managed by `PluginService.cs` (full CRUD + auto-invoke via
+  `TryAutoInvokeAsync`)
+
+**Phase 5 stub tables (reserved for RAG):**
+- `DataSources`, `RegisteredActions` — schema exists, not yet used by any service logic.
 
 ---
 
@@ -230,6 +243,13 @@ dotnet run
 | GET | `/api/chat/stream/{id}` | `?message=` | SSE stream (`text/event-stream`) |
 | POST | `/api/chat/stream-sdk` | `SdkStreamRequest` (JSON body) | SSE stream (`text/event-stream`) |
 | GET | `/api/health` | — | `{status, ollamaReachable, timestamp}` |
+| GET | `/api/plugins` | — | `PluginDto[]` |
+| GET | `/api/plugins/{id}` | — | `PluginDto` |
+| POST | `/api/plugins` | `CreatePluginRequest` | `PluginDto` (201) |
+| PUT | `/api/plugins/{id}` | `UpdatePluginRequest` | `PluginDto` |
+| DELETE | `/api/plugins/{id}` | — | 204 No Content |
+| PATCH | `/api/plugins/{id}/toggle` | — | `PluginDto` (toggles `IsActive`) |
+| POST | `/api/plugins/{id}/execute` | `{parameters}` | `PluginExecuteResult` |
 
 **`SendMessageRequest` constraints:** `content` 1–10 000 chars; `inputMethod` max 20 chars.
 Optional SDK fields (always null from the main chatbot-app): `hostContext: Dictionary<string,string>`,
@@ -417,12 +437,67 @@ actionRegistry.registerAction({
 
 ---
 
+## Standalone Widget (`standalone-widget/`)
+
+A framework-agnostic Web Component (pure vanilla JavaScript, zero dependencies) for embedding the
+chatbot into **any** application — Angular 9+, React, Vue, or plain HTML. Unlike the
+`chatbot-plugin` Angular library (which requires Angular 21), this works with any framework.
+
+### Key facts
+
+- Shadow DOM for full style isolation — no host app CSS bleeds in
+- Floating FAB or inline embed controlled by the `floating` attribute
+- Voice input/output via Web Speech API
+- ~10 KB minified, ~4 KB gzipped; zero external dependencies
+
+### Build commands
+
+```bash
+cd chatbot-app/standalone-widget
+npm install
+npm run build   # → dist/chatbot-widget.js + dist/chatbot-widget.min.js
+npm run serve   # dev server at http://localhost:8080/demo.html
+```
+
+### Usage (any framework)
+
+```html
+<script src="chatbot-widget.min.js"></script>
+<chatbot-widget
+  api-url="http://localhost:5112/api/chat"
+  title="AI Assistant"
+  floating="true"
+  enable-voice="true">
+</chatbot-widget>
+```
+
+### Attributes
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `api-url` | `http://localhost:8000/api/chat` | Backend API endpoint |
+| `title` | `AI Assistant` | Widget header title |
+| `floating` | `true` | `true` = floating FAB; `false` = inline embed |
+| `enable-voice` | `true` | Enable STT/TTS |
+
+### Angular 9+ integration steps
+
+1. Copy `dist/chatbot-widget.min.js` → `src/assets/js/`
+2. Add to `angular.json` under `scripts`
+3. Add `CUSTOM_ELEMENTS_SCHEMA` to your `NgModule`
+4. Use `<chatbot-widget ...>` in any template
+
+See `standalone-widget/README.md` and `standalone-widget/ANGULAR9_GUIDE.md` for full details
+including React and Vue examples.
+
+---
+
 ## Phase Roadmap (Architecture Decisions)
 
-- **Phase 2** — Voice input/output via Web Speech API; Gemini as a second AI provider; `inputMethod` tracked per message.
-- **Phase 3** — Server-side plugins: `PluginRegistrations` DB table active; `ChatService` auto-invokes plugins via `plugin_call` JSON pattern.
-- **Phase 4 (current)** — Chatbot Plugin SDK: `chatbot-plugin` Angular library; `POST /api/chat/stream-sdk`; host context + host action callbacks; floating/inline widget.
-- **Phase 5 — RAG**: add `pgvector` extension + `dotnet ef migrations add AddVectorSearch`; Semantic Kernel function calling integrates into `ChatService`.
+- **Phase 2 — DONE** — Voice input/output via Web Speech API; Gemini as a second AI provider; `inputMethod` tracked per message.
+- **Phase 3 — DONE** — Server-side plugins: full CRUD via `PluginsController` + `PluginService`; `TryAutoInvokeAsync` in `ChatService` detects `plugin_call` JSON and calls registered plugin HTTP endpoints.
+- **Phase 4 — DONE** — Chatbot Plugin SDK (`chatbot-plugin` Angular library) + Standalone Web Component (`standalone-widget`); `POST /api/chat/stream-sdk`; host context + host action callbacks; floating/inline widget.
+- **Phase 5 (next) — RAG**: add `pgvector` extension + `dotnet ef migrations add AddVectorSearch`; `EmbeddingService` + `RAGService` with Ollama `nomic-embed-text` model; Semantic Kernel function calling integrates into `ChatService`.
 
 ---
 

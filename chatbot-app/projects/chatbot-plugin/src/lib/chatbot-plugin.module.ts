@@ -1,7 +1,6 @@
 import { NgModule, ModuleWithProviders } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClientModule } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -34,7 +33,6 @@ import { PluginConfig } from './models/plugin-config.interface';
   imports: [
     CommonModule,
     FormsModule,
-    HttpClientModule,
     MatButtonModule,
     MatIconModule,
     MatInputModule,
@@ -44,19 +42,19 @@ import { PluginConfig } from './models/plugin-config.interface';
     MatSlideToggleModule,
     MatSelectModule
   ],
-  exports: [ChatbotWidgetComponent],
-  providers: [
-    ActionRegistryService,
-    SdkConversationService,
-    SdkChatService,
-    SdkVoiceService
-  ]
+  exports: [ChatbotWidgetComponent]
 })
 export class ChatbotPluginModule {
   static forRoot(config: PluginConfig): ModuleWithProviders<ChatbotPluginModule> {
     return {
       ngModule: ChatbotPluginModule,
-      providers: [{ provide: PLUGIN_CONFIG, useValue: config }]
+      providers: [
+        { provide: PLUGIN_CONFIG, useValue: config },
+        ActionRegistryService,
+        SdkConversationService,
+        SdkChatService,
+        SdkVoiceService
+      ]
     };
   }
 }

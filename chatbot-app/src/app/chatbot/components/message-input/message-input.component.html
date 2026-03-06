@@ -1,17 +1,43 @@
 <div class="input-container">
-  <div class="textarea-wrapper">
-    <textarea
-      #textArea
-      [(ngModel)]="content"
-      (keydown)="onKeyDown($event)"
-      (input)="onInput()"
+  <div class="input-row">
+    <button
+      *ngIf="voiceService.sttSupported"
+      mat-icon-button
+      (click)="toggleRecording()"
+      [class.recording]="isListening"
       [disabled]="isLoading"
-      placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
-      rows="1"
-      class="message-textarea"
-    ></textarea>
+      class="mic-button"
+      matTooltip="{{ isListening ? 'Stop recording' : 'Start voice input' }}"
+    >
+      <mat-icon>{{ isListening ? 'mic' : 'mic_none' }}</mat-icon>
+    </button>
+    
+    <div class="textarea-wrapper">
+      <textarea
+        #textArea
+        [(ngModel)]="content"
+        (keydown)="onKeyDown($event)"
+        (input)="onInput()"
+        [disabled]="isLoading"
+        placeholder="Type your message..."
+        rows="1"
+        class="message-textarea"
+      ></textarea>
+    </div>
+    
+    <button
+      mat-icon-button
+      (click)="send()"
+      [disabled]="!canSend"
+      class="send-button"
+      [class.can-send]="canSend"
+      matTooltip="Send message"
+    >
+      <mat-icon>{{ isLoading ? 'hourglass_empty' : 'send' }}</mat-icon>
+    </button>
   </div>
-  <div class="input-footer">
+  
+  <div class="input-footer" *ngIf="isListening || charCount > maxLength * 0.8">
     <div class="footer-left">
       <span class="char-count" [class.over-limit]="isOverLimit">
         {{ charCount }}/{{ maxLength }}
@@ -19,27 +45,6 @@
       <span *ngIf="isListening" class="recording-indicator">
         <span class="recording-dot"></span> Recording...
       </span>
-    </div>
-    <div class="footer-right">
-      <button
-        *ngIf="voiceService.sttSupported"
-        (click)="toggleRecording()"
-        [class.recording]="isListening"
-        [disabled]="isLoading"
-        class="mic-button"
-        title="Toggle voice input"
-      >
-        🎤
-      </button>
-      <button
-        (click)="send()"
-        [disabled]="!canSend"
-        class="send-button"
-        title="Send message"
-      >
-        <span *ngIf="!isLoading">Send ➤</span>
-        <span *ngIf="isLoading">...</span>
-      </button>
     </div>
   </div>
 </div>

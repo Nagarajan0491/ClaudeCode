@@ -8,6 +8,8 @@ obj/
 # Angular
 chatbot-app/node_modules/
 chatbot-app/dist/
+chatbot-app/standalone-widget/node_modules/
+chatbot-app/standalone-widget/package-lock.json
 
 # Env / secrets
 appsettings.Development.json

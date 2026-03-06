@@ -15,16 +15,21 @@
   <div class="chat-area">
     <!-- Header -->
     <div class="chat-header">
-      <button class="toggle-sidebar-btn" (click)="toggleSidebar()" title="Toggle sidebar">
-        ☰
+      <button mat-icon-button class="toggle-sidebar-btn" (click)="toggleSidebar()" matTooltip="Toggle sidebar">
+        <mat-icon>menu</mat-icon>
       </button>
-      <h1 class="chat-title">
-        {{ selectedConversation?.title || 'AI Chatbot' }}
-      </h1>
-      <button mat-icon-button (click)="openPluginManagement()" matTooltip="Manage Plugins">
-        <mat-icon>extension</mat-icon>
-      </button>
-      <app-voice-settings></app-voice-settings>
+      <div class="header-title">
+        <mat-icon class="header-icon">chat</mat-icon>
+        <h1 class="chat-title">
+          {{ selectedConversation?.title || 'AI Assistant' }}
+        </h1>
+      </div>
+      <div class="header-actions">
+        <button mat-icon-button (click)="openPluginManagement()" matTooltip="Manage Plugins">
+          <mat-icon>extension</mat-icon>
+        </button>
+        <app-voice-settings></app-voice-settings>
+      </div>
     </div>
 
     <!-- Messages -->
