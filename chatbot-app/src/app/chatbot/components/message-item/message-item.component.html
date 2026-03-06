@@ -1,10 +1,10 @@
 <div class="message-wrapper" [class.user-message]="isUser" [class.bot-message]="!isUser">
   <div class="avatar">{{ isUser ? '🧑' : '🤖' }}</div>
   <div class="message-content">
-    <div class="bubble" [class.user-bubble]="isUser" [class.bot-bubble]="!isUser">
+    <div class="bubble" [class.user-bubble]="isUser" [class.bot-bubble]="!isUser && !message.isError" [class.error-bubble]="message.isError">
       <p class="message-text" [innerHTML]="message.content"></p>
     </div>
-    <div *ngIf="!isUser && voiceService.ttsSupported" class="playback-controls">
+    <div *ngIf="!isUser && !message.isError && voiceService.ttsSupported" class="playback-controls">
       <button
         (click)="playMessage()"
         [disabled]="isPlaying"

@@ -70,14 +70,23 @@ export class MessageInputComponent implements OnInit, OnDestroy {
 
   toggleRecording(): void {
     if (this.isListening) {
+      // Signal the browser to stop. recognition.stop() is asynchronous — it fires
+      // one final onresult event with the complete transcript before onend fires.
+      // Keep the subscription alive so that final event can update this.content.
       this.voiceService.stopListening();
-      this.transcriptSub?.unsubscribe();
     } else {
+      // Clean up any subscription left over from the previous recording, then
+      // start a fresh one. Tearing it down here (not on stop) ensures the final
+      // transcript from the previous session is never missed.
+      this.transcriptSub?.unsubscribe();
       this.isVoiceInput = true;
       this.content = '';
       this.voiceService.startListening();
       this.transcriptSub = this.voiceService.transcript$.pipe(takeUntil(this.destroy$)).subscribe(text => {
-        if (this.isListening) {
+        // No isListening guard here — the final transcript arrives AFTER
+        // isListening flips to false, so the guard would silently drop it.
+        // Skip the empty string that BehaviorSubject emits on subscription.
+        if (text) {
           this.content = text;
           this.autoResize();
           this.cdr.detectChanges();

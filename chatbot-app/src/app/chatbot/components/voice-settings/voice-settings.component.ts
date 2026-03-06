@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Subject, takeUntil } from 'rxjs';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { VoiceService } from '../../services/voice.service';
 
 @Component({
@@ -14,6 +15,7 @@ import { VoiceService } from '../../services/voice.service';
       >
         Auto-play
       </mat-slide-toggle>
+
       <mat-select
         *ngIf="voices.length > 0"
         [(value)]="selectedVoiceIndex"
@@ -26,6 +28,31 @@ import { VoiceService } from '../../services/voice.service';
           {{ voice.name }}
         </mat-option>
       </mat-select>
+
+      <button
+        mat-stroked-button
+        class="tamil-btn"
+        (click)="onSelectTamilVoice()"
+        title="Auto-select Tamil voice"
+      >Tamil Voice</button>
+
+      <div class="slider-group">
+        <label>Speed: {{ voiceService.rate | number:'1.2-2' }}×</label>
+        <input
+          type="range" min="0.5" max="2" step="0.05"
+          [value]="voiceService.rate"
+          (input)="onRateChange($event)"
+        />
+      </div>
+
+      <div class="slider-group">
+        <label>Pitch: {{ voiceService.pitch | number:'1.2-2' }}×</label>
+        <input
+          type="range" min="0.5" max="2" step="0.05"
+          [value]="voiceService.pitch"
+          (input)="onPitchChange($event)"
+        />
+      </div>
     </div>
   `,
   styles: [`
@@ -34,6 +61,7 @@ import { VoiceService } from '../../services/voice.service';
       align-items: center;
       gap: 12px;
       margin-left: auto;
+      flex-wrap: wrap;
     }
     .autoplay-toggle {
       font-size: 13px;
@@ -41,6 +69,20 @@ import { VoiceService } from '../../services/voice.service';
     .voice-select {
       width: 160px;
       font-size: 13px;
+    }
+    .tamil-btn {
+      font-size: 12px;
+      height: 32px;
+    }
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 12px;
+      gap: 2px;
+    }
+    .slider-group input {
+      width: 90px;
     }
   `]
 })
@@ -52,7 +94,11 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
-  constructor(private voiceService: VoiceService, private cdr: ChangeDetectorRef) {
+  constructor(
+    public voiceService: VoiceService,
+    private cdr: ChangeDetectorRef,
+    private snackBar: MatSnackBar
+  ) {
     this.ttsSupported = voiceService.ttsSupported;
   }
 
@@ -61,8 +107,15 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
       this.autoPlay = val;
       this.cdr.detectChanges();
     });
+
     this.voiceService.voices$.pipe(takeUntil(this.destroy$)).subscribe(voices => {
       this.voices = voices;
+      this.cdr.detectChanges();
+    });
+
+    this.voiceService.selectedVoiceName$.pipe(takeUntil(this.destroy$)).subscribe(name => {
+      const idx = this.voices.findIndex(v => v.name === name);
+      this.selectedVoiceIndex = idx >= 0 ? idx : -1;
       this.cdr.detectChanges();
     });
   }
@@ -79,5 +132,30 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
   onVoiceChange(index: number): void {
     this.selectedVoiceIndex = index;
     this.voiceService.selectedVoice = index >= 0 ? this.voices[index] : null;
+    const name = index >= 0 ? this.voices[index].name : '';
+    localStorage.setItem('voice_preferred_name', name);
+    this.voiceService.selectedVoiceName$.next(name);
+  }
+
+  onSelectTamilVoice(): void {
+    const found = this.voiceService.autoSelectTamilVoice();
+    if (!found) {
+      this.snackBar.open('No Tamil voice installed on this device', 'Dismiss', {
+        duration: 4000,
+        horizontalPosition: 'center',
+        verticalPosition: 'bottom'
+      });
+    }
+    this.cdr.detectChanges();
+  }
+
+  onRateChange(event: Event): void {
+    this.voiceService.rate = parseFloat((event.target as HTMLInputElement).value);
+    this.cdr.detectChanges();
+  }
+
+  onPitchChange(event: Event): void {
+    this.voiceService.pitch = parseFloat((event.target as HTMLInputElement).value);
+    this.cdr.detectChanges();
   }
 }

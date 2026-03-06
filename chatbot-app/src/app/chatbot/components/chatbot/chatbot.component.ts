@@ -150,7 +150,7 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.shouldScrollToBottom = true;
         this.cdr.detectChanges();
 
-        if (this.voiceService.autoPlay$.value) {
+        if (inputMethod === 'voice' || this.voiceService.autoPlay$.value) {
           this.voiceService.speakMessage(assistantMessage.id, assistantMessage.content);
         }
 
@@ -159,11 +159,23 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
       error: (err) => {
         if (this.selectedConversation?.id !== conversationId) return;
         this.isLoading = false;
-        this.messages.pop();
-        const errorMsg = err.status === 503
-          ? 'Ollama is not running. Please start it with: ollama serve'
-          : 'Failed to send message. Please try again.';
-        this.showError(errorMsg);
+        const errorText = err.status === 503
+          ? 'model is not running. Please start the model'
+          : (err.status === 401 || err.status === 403)
+            ? 'AI provider authentication failed. Check your API key configuration.'
+            : 'Something went wrong while processing your request. Please try again.';
+        const errorMessage: Message = {
+          id: -Date.now(),
+          conversationId,
+          role: 'assistant',
+          content: errorText,
+          inputMethod: 'text',
+          isError: true,
+          timestamp: new Date().toISOString()
+        };
+        this.messages.push(errorMessage);
+        this.shouldScrollToBottom = true;
+        this.cdr.detectChanges();
       }
     });
   }

@@ -5,4 +5,5 @@ export interface Message {
   content: string;
   inputMethod: string;
   timestamp: string;
+  isError?: boolean;
 }

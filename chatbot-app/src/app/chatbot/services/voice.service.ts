@@ -18,10 +18,17 @@ export class VoiceService {
   readonly autoPlay$ = new BehaviorSubject<boolean>(
     localStorage.getItem('voice_autoplay') === 'true'
   );
+  readonly selectedVoiceName$ = new BehaviorSubject<string>(
+    localStorage.getItem('voice_preferred_name') ?? ''
+  );
 
   selectedVoice: SpeechSynthesisVoice | null = null;
-  rate = 1;
-  pitch = 1;
+
+  get rate(): number { return parseFloat(localStorage.getItem('voice_rate') ?? '1'); }
+  set rate(v: number) { localStorage.setItem('voice_rate', String(v)); }
+
+  get pitch(): number { return parseFloat(localStorage.getItem('voice_pitch') ?? '1'); }
+  set pitch(v: number) { localStorage.setItem('voice_pitch', String(v)); }
 
   readonly sttSupported: boolean;
   readonly ttsSupported: boolean;
@@ -64,6 +71,7 @@ export class VoiceService {
         const voices = this.synthesis.getVoices();
         if (voices.length > 0) {
           this.voices$.next(voices);
+          this.restoreOrAutoSelect(voices);
         }
       };
       this.synthesis.addEventListener('voiceschanged', loadVoices);
@@ -71,6 +79,32 @@ export class VoiceService {
     }
 
     this.autoPlay$.subscribe(val => localStorage.setItem('voice_autoplay', String(val)));
+  }
+
+  private restoreOrAutoSelect(voices: SpeechSynthesisVoice[]): void {
+    const savedName = localStorage.getItem('voice_preferred_name');
+    if (savedName) {
+      const saved = voices.find(v => v.name === savedName);
+      if (saved) {
+        this.selectedVoice = saved;
+        this.selectedVoiceName$.next(saved.name);
+        return;
+      }
+    }
+    this.autoSelectTamilVoice(voices);
+  }
+
+  autoSelectTamilVoice(voices?: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+    const list = voices ?? this.voices$.value;
+    const found = list.find(v => v.lang.startsWith('ta'));
+    if (found) {
+      this.selectedVoice = found;
+      this.pitch = 0.85;
+      this.rate = 0.9;
+      localStorage.setItem('voice_preferred_name', found.name);
+      this.selectedVoiceName$.next(found.name);
+    }
+    return found ?? null;
   }
 
   startListening(): void {
@@ -93,10 +127,15 @@ export class VoiceService {
     this.activeMessageId$.next(messageId);
   }
 
-  private stripEmojis(text: string): string {
-    // Remove emoji / pictographic characters so TTS doesn't vocalise them.
+  private sanitizeForTts(text: string): string {
     return text
-      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
+      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') // emojis
+      .replace(/#{1,6}\s+/g, '')           // markdown headings
+      .replace(/\*\*(.+?)\*\*/g, '$1')     // bold **text**
+      .replace(/\*(.+?)\*/g, '$1')         // italic *text*
+      .replace(/`{1,3}[^`]*`{1,3}/g, '')  // inline code / code blocks
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links [label](url)
+      .replace(/[_~>|]/g, '')              // underscores, strikethrough, blockquotes, tables
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -104,7 +143,7 @@ export class VoiceService {
   speak(text: string): void {
     if (!this.ttsSupported) return;
     this.stop();
-    const utterance = new SpeechSynthesisUtterance(this.stripEmojis(text));
+    const utterance = new SpeechSynthesisUtterance(this.sanitizeForTts(text));
     if (this.selectedVoice) utterance.voice = this.selectedVoice;
     utterance.rate = this.rate;
     utterance.pitch = this.pitch;

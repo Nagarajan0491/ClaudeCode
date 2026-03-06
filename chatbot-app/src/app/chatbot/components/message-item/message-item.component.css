@@ -49,6 +49,13 @@
   border-bottom-left-radius: 4px;
 }
 
+.error-bubble {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-bottom-left-radius: 4px;
+}
+
 .message-text {
   margin: 0;
   white-space: pre-wrap;
