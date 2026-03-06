@@ -48,7 +48,7 @@ public class ChatService : IChatService
         await _messageRepository.AddAsync(userMessage, cancellationToken);
 
         // Build message list for Ollama /api/chat (cap history to last 10 messages to avoid growing slowness)
-        var historyLimit = _configuration.GetValue<int>("Ollama:HistoryLimit", 10);
+        var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var messages = new List<ChatMessage>
         {
             new("system", "You are a helpful AI assistant. Be concise, accurate, and friendly.")
@@ -57,9 +57,9 @@ public class ChatService : IChatService
             messages.Add(new ChatMessage(msg.Role, msg.Content));
         messages.Add(new ChatMessage("user", request.Content));
 
-        var model = _configuration["Ollama:DefaultModel"] ?? "llama2";
+        var model = _configuration["AIProvider:DefaultModel"] ?? "phi3:mini";
 
-        _logger.LogInformation("Sending message to Ollama model {Model} for conversation {ConversationId}",
+        _logger.LogInformation("Sending message to model {Model} model for conversation {ConversationId}",
             model, request.ConversationId);
 
         var aiResponse = await _aiProvider.GenerateResponseAsync(messages, model, cancellationToken);
@@ -100,7 +100,7 @@ public class ChatService : IChatService
         var conversation = await _conversationRepository.GetByIdAsync(conversationId, cancellationToken)
             ?? throw new ConversationNotFoundException(conversationId);
 
-        var historyLimit = _configuration.GetValue<int>("Ollama:HistoryLimit", 10);
+        var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var messages = new List<ChatMessage>
         {
             new("system", "You are a helpful AI assistant. Be concise, accurate, and friendly.")
@@ -109,7 +109,7 @@ public class ChatService : IChatService
             messages.Add(new ChatMessage(msg.Role, msg.Content));
         messages.Add(new ChatMessage("user", message));
 
-        var model = _configuration["Ollama:DefaultModel"] ?? "llama2";
+        var model = _configuration["AIProvider:DefaultModel"] ?? "phi3:mini";
 
         await foreach (var chunk in _aiProvider.StreamResponseAsync(messages, model, cancellationToken))
         {

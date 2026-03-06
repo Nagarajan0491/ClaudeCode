@@ -3,6 +3,7 @@ using ChatbotAPI.Middleware;
 using ChatbotAPI.Services;
 using ChatbotAPI.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.SemanticKernel;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -31,12 +32,28 @@ builder.Services.AddCors(options =>
 builder.Services.AddDbContext<ChatDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// HTTP clients
-builder.Services.AddHttpClient<OllamaService>();
+// AI provider — selected via AIProvider:Provider config key
+var providerName = builder.Configuration.GetValue<string>("AIProvider:Provider", "Ollama");
+
+if (providerName.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
+{
+    var apiKey = builder.Configuration.GetValue<string>("Gemini:ApiKey");
+    if (string.IsNullOrWhiteSpace(apiKey))
+        throw new InvalidOperationException("Gemini:ApiKey must be configured when AIProvider:Provider = Gemini");
+
+    var model = builder.Configuration.GetValue<string>("AIProvider:DefaultModel", "gemini-2.5-flash")!;
+    builder.Services.AddGoogleAIGeminiChatCompletion(model, apiKey);
+    builder.Services.AddScoped<IAIProvider, GeminiService>();
+}
+else  // default: Ollama
+{
+    builder.Services.AddHttpClient<OllamaService>();
+    builder.Services.AddScoped<IAIProvider, OllamaService>();
+}
+
 builder.Services.AddHttpClient();
 
 // Application services
-builder.Services.AddScoped<IAIProvider, OllamaService>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();

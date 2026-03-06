@@ -32,6 +32,7 @@ public class ExceptionHandlingMiddleware
         var (statusCode, message) = ex switch
         {
             OllamaConnectionException => (HttpStatusCode.ServiceUnavailable, ex.Message),
+            GeminiConnectionException => (HttpStatusCode.ServiceUnavailable, ex.Message),
             ConversationNotFoundException => (HttpStatusCode.NotFound, ex.Message),
             InvalidMessageException => (HttpStatusCode.BadRequest, ex.Message),
             KeyNotFoundException => (HttpStatusCode.NotFound, ex.Message),
