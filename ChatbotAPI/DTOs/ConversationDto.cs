@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ChatbotAPI.DTOs;
 
 public class ConversationDto
@@ -18,4 +20,11 @@ public class MessageDto
     public string Content { get; set; } = string.Empty;
     public string InputMethod { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
+}
+
+public class UpdateTitleRequest
+{
+    [Required]
+    [MaxLength(255)]
+    public string Title { get; set; } = string.Empty;
 }

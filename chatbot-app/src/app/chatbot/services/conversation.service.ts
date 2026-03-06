@@ -50,4 +50,10 @@ export class ConversationService {
     );
     this.conversationsSubject.next(current);
   }
+
+  renameConversation(id: number, title: string): Observable<Conversation> {
+    return this.http.put<Conversation>(`${this.apiUrl}/api/conversations/${id}/title`, { title }).pipe(
+      tap(updated => this.updateConversationInList(updated))
+    );
+  }
 }

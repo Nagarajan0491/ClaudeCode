@@ -85,4 +85,21 @@ public class ConversationController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpPut("{id:int}/title")]
+    public async Task<ActionResult<ConversationDto>> UpdateTitle(
+        int id, [FromBody] UpdateTitleRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var conversation = await _conversationRepository.UpdateTitleAsync(id, request.Title.Trim(), cancellationToken);
+        return Ok(new ConversationDto
+        {
+            Id = conversation.Id,
+            Title = conversation.Title,
+            CreatedAt = conversation.CreatedAt,
+            UpdatedAt = conversation.UpdatedAt,
+            MessageCount = conversation.Messages?.Count ?? 0
+        });
+    }
 }

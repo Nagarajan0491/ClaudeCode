@@ -14,14 +14,35 @@
       (click)="select(conv)"
     >
       <div class="conv-info">
-        <span class="conv-title">{{ conv.title }}</span>
+        <ng-container *ngIf="editingId === conv.id; else titleDisplay">
+          <input
+            #editInput
+            class="conv-title-input"
+            [value]="editTitle"
+            (input)="editTitle = $any($event.target).value"
+            (keydown.enter)="saveEdit(conv)"
+            (keydown.escape)="cancelEdit($event)"
+            (blur)="saveEdit(conv)"
+            (click)="$event.stopPropagation()"
+          />
+        </ng-container>
+        <ng-template #titleDisplay>
+          <span class="conv-title">{{ conv.title }}</span>
+        </ng-template>
         <span class="conv-date">{{ formatDate(conv.updatedAt) }}</span>
       </div>
-      <button
-        class="delete-btn"
-        (click)="delete($event, conv.id)"
-        title="Delete conversation"
-      >✕</button>
+      <div class="conv-actions">
+        <button
+          class="edit-btn"
+          (click)="startEdit($event, conv)"
+          title="Rename conversation"
+        >✎</button>
+        <button
+          class="delete-btn"
+          (click)="delete($event, conv.id)"
+          title="Delete conversation"
+        >✕</button>
+      </div>
     </div>
 
     <div *ngIf="conversations.length === 0" class="empty-state">

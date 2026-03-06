@@ -75,13 +75,29 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(assistantMessage, cancellationToken);
 
-        // Auto-title on first message
+        // Auto-title on first message using AI
         if (!conversation.Messages.Any())
         {
-            var title = request.Content.Length > 50
-                ? request.Content[..50] + "..."
-                : request.Content;
-            await _conversationRepository.UpdateTitleAsync(request.ConversationId, title, cancellationToken);
+            try
+            {
+                var titleMessages = new List<ChatMessage>
+                {
+                    new("system", "Generate a concise, descriptive title of 3 to 7 words for a chat conversation based on the user message and AI response provided. Return only the title text with no quotes and no trailing punctuation."),
+                    new("user", $"User: {request.Content}\n\nAssistant: {aiResponse}")
+                };
+                var generatedTitle = await _aiProvider.GenerateResponseAsync(titleMessages, model, cancellationToken);
+                generatedTitle = generatedTitle.Trim().Trim('"').TrimEnd('.').Trim();
+                var finalTitle = !string.IsNullOrWhiteSpace(generatedTitle)
+                    ? (generatedTitle.Length > 100 ? generatedTitle[..100] : generatedTitle)
+                    : (request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content);
+                await _conversationRepository.UpdateTitleAsync(request.ConversationId, finalTitle, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to generate AI title for conversation {Id}, falling back to truncation", request.ConversationId);
+                var title = request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content;
+                await _conversationRepository.UpdateTitleAsync(request.ConversationId, title, cancellationToken);
+            }
         }
 
         return new ChatResponse

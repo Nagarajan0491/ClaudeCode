@@ -40,6 +40,13 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
       .pipe(takeUntil(this.destroy$))
       .subscribe(convs => {
         this.conversations = convs;
+        // Keep selectedConversation.title in sync (auto-title + manual rename)
+        if (this.selectedConversation) {
+          const updated = convs.find(c => c.id === this.selectedConversation!.id);
+          if (updated && updated.title !== this.selectedConversation.title) {
+            this.selectedConversation = { ...this.selectedConversation, title: updated.title };
+          }
+        }
         this.cdr.detectChanges();
         if (!this.selectedConversation && convs.length > 0) {
           this.selectConversation(convs[0]);
@@ -177,6 +184,12 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.shouldScrollToBottom = true;
         this.cdr.detectChanges();
       }
+    });
+  }
+
+  renameConversation(event: { id: number; title: string }): void {
+    this.conversationService.renameConversation(event.id, event.title).subscribe({
+      error: () => this.showError('Failed to rename conversation.')
     });
   }
 

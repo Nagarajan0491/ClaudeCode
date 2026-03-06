@@ -6,6 +6,7 @@
       [selectedId]="selectedConversation?.id ?? null"
       (conversationSelected)="selectConversation($event)"
       (conversationDeleted)="deleteConversation($event)"
+      (conversationRenamed)="renameConversation($event)"
       (newConversation)="createConversation()"
     ></app-conversation-list>
   </div>
