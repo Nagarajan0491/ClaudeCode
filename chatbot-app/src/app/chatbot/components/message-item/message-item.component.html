@@ -4,6 +4,26 @@
     <div class="bubble" [class.user-bubble]="isUser" [class.bot-bubble]="!isUser">
       <p class="message-text" [innerHTML]="message.content"></p>
     </div>
+    <div *ngIf="!isUser && voiceService.ttsSupported" class="playback-controls">
+      <button
+        (click)="playMessage()"
+        [disabled]="isPlaying"
+        class="ctrl-btn"
+        title="Play"
+      >▶</button>
+      <button
+        (click)="pauseMessage()"
+        [disabled]="!isPlaying"
+        class="ctrl-btn"
+        title="Pause"
+      >⏸</button>
+      <button
+        (click)="stopMessage()"
+        [disabled]="!isPlaying && !isPaused"
+        class="ctrl-btn"
+        title="Stop"
+      >⏹</button>
+    </div>
     <span class="timestamp">{{ formattedTime }}</span>
   </div>
 </div>

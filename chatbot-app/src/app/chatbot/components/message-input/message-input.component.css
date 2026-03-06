@@ -39,6 +39,18 @@
   margin-top: 8px;
 }
 
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .char-count {
   font-size: 12px;
   color: #9ca3af;
@@ -47,6 +59,54 @@
 .char-count.over-limit {
   color: #ef4444;
   font-weight: bold;
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.mic-button {
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s, border-color 0.2s;
+  line-height: 1;
+}
+
+.mic-button:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.mic-button.recording {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.mic-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .send-button {

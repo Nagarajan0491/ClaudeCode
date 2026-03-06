@@ -54,6 +54,34 @@
   white-space: pre-wrap;
 }
 
+.playback-controls {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.ctrl-btn {
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.6;
+}
+
+.ctrl-btn:hover:not(:disabled) {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.ctrl-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .timestamp {
   font-size: 11px;
   color: #9ca3af;

@@ -5,7 +5,8 @@ import { Conversation } from '../../models/conversation.interface';
 import { Message } from '../../models/message.interface';
 import { ChatService } from '../../services/chat.service';
 import { ConversationService } from '../../services/conversation.service';
-import { MessageInputComponent } from '../message-input/message-input.component';
+import { VoiceService } from '../../services/voice.service';
+import { MessageInputComponent, MessageSentEvent } from '../message-input/message-input.component';
 
 @Component({
   selector: 'app-chatbot',
@@ -29,6 +30,7 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
   constructor(
     private chatService: ChatService,
     private conversationService: ConversationService,
+    private voiceService: VoiceService,
     private snackBar: MatSnackBar,
     private cdr: ChangeDetectorRef
   ) {}
@@ -108,7 +110,8 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     });
   }
 
-  sendMessage(content: string): void {
+  sendMessage(event: MessageSentEvent): void {
+    const { content, inputMethod } = event;
     if (!this.selectedConversation || !content.trim()) return;
 
     if (!navigator.onLine) {
@@ -116,20 +119,22 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
       return;
     }
 
+    this.voiceService.stop();
+
     const conversationId = this.selectedConversation.id;
     const userMessage: Message = {
       id: Date.now(),
       conversationId,
       role: 'user',
       content,
-      inputMethod: 'text',
+      inputMethod,
       timestamp: new Date().toISOString()
     };
     this.messages.push(userMessage);
     this.isLoading = true;
     this.shouldScrollToBottom = true;
 
-    this.chatService.sendMessage(conversationId, content).subscribe({
+    this.chatService.sendMessage(conversationId, content, inputMethod).subscribe({
       next: (response) => {
         if (this.selectedConversation?.id !== conversationId) return;
         const assistantMessage: Message = {
@@ -144,6 +149,11 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.isLoading = false;
         this.shouldScrollToBottom = true;
         this.cdr.detectChanges();
+
+        if (this.voiceService.autoPlay$.value) {
+          this.voiceService.speakMessage(assistantMessage.id, assistantMessage.content);
+        }
+
         setTimeout(() => this.conversationService.getConversations().subscribe(), 0);
       },
       error: (err) => {

@@ -4,7 +4,7 @@
       #textArea
       [(ngModel)]="content"
       (keydown)="onKeyDown($event)"
-      (input)="autoResize()"
+      (input)="onInput()"
       [disabled]="isLoading"
       placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
       rows="1"
@@ -12,17 +12,34 @@
     ></textarea>
   </div>
   <div class="input-footer">
-    <span class="char-count" [class.over-limit]="isOverLimit">
-      {{ charCount }}/{{ maxLength }}
-    </span>
-    <button
-      (click)="send()"
-      [disabled]="!canSend"
-      class="send-button"
-      title="Send message"
-    >
-      <span *ngIf="!isLoading">Send ➤</span>
-      <span *ngIf="isLoading">...</span>
-    </button>
+    <div class="footer-left">
+      <span class="char-count" [class.over-limit]="isOverLimit">
+        {{ charCount }}/{{ maxLength }}
+      </span>
+      <span *ngIf="isListening" class="recording-indicator">
+        <span class="recording-dot"></span> Recording...
+      </span>
+    </div>
+    <div class="footer-right">
+      <button
+        *ngIf="voiceService.sttSupported"
+        (click)="toggleRecording()"
+        [class.recording]="isListening"
+        [disabled]="isLoading"
+        class="mic-button"
+        title="Toggle voice input"
+      >
+        🎤
+      </button>
+      <button
+        (click)="send()"
+        [disabled]="!canSend"
+        class="send-button"
+        title="Send message"
+      >
+        <span *ngIf="!isLoading">Send ➤</span>
+        <span *ngIf="isLoading">...</span>
+      </button>
+    </div>
   </div>
 </div>
