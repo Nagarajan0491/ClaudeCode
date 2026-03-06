@@ -35,6 +35,11 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
 // AI provider — selected via AIProvider:Provider config key
 var providerName = builder.Configuration.GetValue<string>("AIProvider:Provider", "Ollama");
 
+// Allow GEMINI_API_KEY environment variable to supply the key
+var geminiEnvKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+if (!string.IsNullOrEmpty(geminiEnvKey))
+    builder.Configuration["Gemini:ApiKey"] = geminiEnvKey;
+
 if (providerName.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
 {
     var apiKey = builder.Configuration.GetValue<string>("Gemini:ApiKey");
