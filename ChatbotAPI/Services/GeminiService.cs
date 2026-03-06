@@ -52,10 +52,29 @@ public class GeminiService : IAIProvider
             throw new GeminiConnectionException("Failed to start streaming from Gemini API.", ex);
         }
 
-        await foreach (var chunk in stream.WithCancellation(cancellationToken))
+        var enumerator = stream.WithCancellation(cancellationToken).GetAsyncEnumerator();
+        try
         {
-            if (!string.IsNullOrEmpty(chunk.Content))
-                yield return chunk.Content;
+            while (true)
+            {
+                bool hasNext;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                }
+                catch (Exception ex) when (ex is not GeminiConnectionException)
+                {
+                    var statusCode = (ex as Microsoft.SemanticKernel.HttpOperationException)?.StatusCode;
+                    throw new GeminiConnectionException("Failed to stream response from Gemini API.", ex, statusCode);
+                }
+                if (!hasNext) break;
+                if (!string.IsNullOrEmpty(enumerator.Current.Content))
+                    yield return enumerator.Current.Content;
+            }
+        }
+        finally
+        {
+            await enumerator.DisposeAsync();
         }
     }
 

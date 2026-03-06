@@ -1,0 +1,24 @@
+<div class="cp-input-row">
+  <button *ngIf="enableVoice && voiceService.sttSupported"
+    class="cp-input__mic"
+    [class.cp-input__mic--active]="voiceService.isListening$ | async"
+    (click)="toggleVoice()"
+    [disabled]="disabled"
+    title="Voice input">
+    <mat-icon>{{ (voiceService.isListening$ | async) ? 'mic' : 'mic_none' }}</mat-icon>
+  </button>
+  <textarea
+    class="cp-input__textarea"
+    [(ngModel)]="content"
+    [disabled]="disabled"
+    (keydown)="onKeydown($event)"
+    placeholder="Type a message..."
+    rows="1"></textarea>
+  <button
+    class="cp-input__send"
+    (click)="send()"
+    [disabled]="disabled || !content.trim()"
+    title="Send">
+    <mat-icon>send</mat-icon>
+  </button>
+</div>

@@ -1,12 +1,16 @@
 import { ChangeDetectorRef, Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { Subject, takeUntil } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { Conversation } from '../../models/conversation.interface';
 import { Message } from '../../models/message.interface';
+import { Plugin } from '../../models/plugin.interface';
 import { ChatService } from '../../services/chat.service';
 import { ConversationService } from '../../services/conversation.service';
 import { VoiceService } from '../../services/voice.service';
+import { PluginService } from '../../services/plugin.service';
 import { MessageInputComponent, MessageSentEvent } from '../message-input/message-input.component';
+import { PluginManagementComponent } from '../plugin-management/plugin-management.component';
 
 @Component({
   selector: 'app-chatbot',
@@ -31,31 +35,38 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     private chatService: ChatService,
     private conversationService: ConversationService,
     private voiceService: VoiceService,
+    private pluginService: PluginService,
+    private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private cdr: ChangeDetectorRef
   ) {}
+
+  get activePlugins(): Plugin[] {
+    return this.pluginService.activePlugins;
+  }
 
   ngOnInit(): void {
     this.conversationService.conversations$
       .pipe(takeUntil(this.destroy$))
       .subscribe(convs => {
         this.conversations = convs;
-        // Keep selectedConversation.title in sync (auto-title + manual rename)
         if (this.selectedConversation) {
           const updated = convs.find(c => c.id === this.selectedConversation!.id);
           if (updated && updated.title !== this.selectedConversation.title) {
             this.selectedConversation = { ...this.selectedConversation, title: updated.title };
           }
         }
-        this.cdr.detectChanges();
         if (!this.selectedConversation && convs.length > 0) {
           this.selectConversation(convs[0]);
         }
+        this.cdr.detectChanges();
       });
 
     this.conversationService.getConversations().subscribe({
       error: () => this.showError('Failed to load conversations. Is the backend running?')
     });
+
+    this.pluginService.loadPlugins().subscribe();
   }
 
   ngAfterViewChecked(): void {
@@ -68,6 +79,42 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  openPluginManagement(): void {
+    this.dialog.open(PluginManagementComponent, { width: '620px' });
+  }
+
+  triggerPlugin(plugin: Plugin): void {
+    if (!this.selectedConversation) return;
+    const conversationId = this.selectedConversation.id;
+    this.isLoading = true;
+    this.cdr.detectChanges();
+
+    this.pluginService.executePlugin(plugin.id).subscribe({
+      next: (result) => {
+        this.isLoading = false;
+        const content = result.success
+          ? `**Plugin: ${plugin.name}**\n\n${result.output ?? 'No output returned.'}`
+          : `**Plugin: ${plugin.name} (failed)**\n\n${result.error ?? 'Unknown error.'}`;
+        const pluginMessage: Message = {
+          id: -Date.now(),
+          conversationId,
+          role: 'assistant',
+          content,
+          inputMethod: 'text',
+          timestamp: new Date().toISOString()
+        };
+        this.messages.push(pluginMessage);
+        this.shouldScrollToBottom = true;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoading = false;
+        this.showError(`Failed to execute plugin "${plugin.name}".`);
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   selectConversation(conversation: Conversation): void {
@@ -141,50 +188,69 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.isLoading = true;
     this.shouldScrollToBottom = true;
 
-    this.chatService.sendMessage(conversationId, content, inputMethod).subscribe({
-      next: (response) => {
-        if (this.selectedConversation?.id !== conversationId) return;
-        const assistantMessage: Message = {
-          id: response.id,
-          conversationId: response.conversationId,
-          role: 'assistant',
-          content: response.content,
-          inputMethod: 'text',
-          timestamp: response.timestamp
-        };
-        this.messages.push(assistantMessage);
-        this.isLoading = false;
-        this.shouldScrollToBottom = true;
-        this.cdr.detectChanges();
+    const streamingMessageId = -(Date.now() + 1);
+    const streamingMessage: Message = {
+      id: streamingMessageId,
+      conversationId,
+      role: 'assistant',
+      content: '',
+      inputMethod: 'text',
+      isStreaming: true,
+      timestamp: new Date().toISOString()
+    };
+    this.messages.push(streamingMessage);
+    this.cdr.detectChanges();
 
-        if (inputMethod === 'voice' || this.voiceService.autoPlay$.value) {
-          this.voiceService.speakMessage(assistantMessage.id, assistantMessage.content);
+    this.chatService.streamMessage(conversationId, content, inputMethod)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (chunk) => {
+          if (this.selectedConversation?.id !== conversationId) return;
+          const idx = this.messages.findIndex(m => m.id === streamingMessageId);
+          if (idx !== -1) {
+            this.messages[idx] = { ...this.messages[idx], content: this.messages[idx].content + chunk };
+          }
+          this.shouldScrollToBottom = true;
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          if (this.selectedConversation?.id !== conversationId) return;
+          this.isLoading = false;
+          const idx = this.messages.findIndex(m => m.id === streamingMessageId);
+          const errorMessage: Message = {
+            id: -Date.now(),
+            conversationId,
+            role: 'assistant',
+            content: 'Something went wrong while processing your request. Please try again.',
+            inputMethod: 'text',
+            isError: true,
+            timestamp: new Date().toISOString()
+          };
+          if (idx !== -1) {
+            this.messages[idx] = errorMessage;
+          } else {
+            this.messages.push(errorMessage);
+          }
+          this.shouldScrollToBottom = true;
+          this.cdr.detectChanges();
+        },
+        complete: () => {
+          if (this.selectedConversation?.id !== conversationId) return;
+          this.isLoading = false;
+          const idx = this.messages.findIndex(m => m.id === streamingMessageId);
+          if (idx !== -1) {
+            const finalMessage = { ...this.messages[idx], isStreaming: false };
+            this.messages[idx] = finalMessage;
+            this.shouldScrollToBottom = true;
+            this.cdr.detectChanges();
+
+            if (inputMethod === 'voice' || this.voiceService.autoPlay$.value) {
+              this.voiceService.speakMessage(finalMessage.id, finalMessage.content);
+            }
+          }
+          setTimeout(() => this.conversationService.getConversations().subscribe(), 0);
         }
-
-        setTimeout(() => this.conversationService.getConversations().subscribe(), 0);
-      },
-      error: (err) => {
-        if (this.selectedConversation?.id !== conversationId) return;
-        this.isLoading = false;
-        const errorText = err.status === 503
-          ? 'model is not running. Please start the model'
-          : (err.status === 401 || err.status === 403)
-            ? 'AI provider authentication failed. Check your API key configuration.'
-            : 'Something went wrong while processing your request. Please try again.';
-        const errorMessage: Message = {
-          id: -Date.now(),
-          conversationId,
-          role: 'assistant',
-          content: errorText,
-          inputMethod: 'text',
-          isError: true,
-          timestamp: new Date().toISOString()
-        };
-        this.messages.push(errorMessage);
-        this.shouldScrollToBottom = true;
-        this.cdr.detectChanges();
-      }
-    });
+      });
   }
 
   renameConversation(event: { id: number; title: string }): void {

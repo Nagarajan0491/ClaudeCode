@@ -6,4 +6,5 @@ export interface Message {
   inputMethod: string;
   timestamp: string;
   isError?: boolean;
+  isStreaming?: boolean;
 }

@@ -44,8 +44,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
-                  "maximumError": "1MB"
+                  "maximumWarning": "800kB",
+                  "maximumError": "1.5MB"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -80,6 +80,24 @@
         },
         "test": {
           "builder": "@angular/build:unit-test"
+        }
+      }
+    },
+    "chatbot-plugin": {
+      "projectType": "library",
+      "root": "projects/chatbot-plugin",
+      "sourceRoot": "projects/chatbot-plugin/src",
+      "prefix": "cp",
+      "schematics": {
+        "@schematics/angular:component": { "standalone": false }
+      },
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:ng-packagr",
+          "options": {
+            "project": "projects/chatbot-plugin/ng-package.json",
+            "tsConfig": "projects/chatbot-plugin/tsconfig.lib.json"
+          }
         }
       }
     }

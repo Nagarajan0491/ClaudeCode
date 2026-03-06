@@ -1,0 +1,28 @@
+<ng-container *ngIf="isFloating">
+  <button class="cp-fab" (click)="toggleOpen()" [title]="title" *ngIf="!isOpen">
+    <mat-icon>chat</mat-icon>
+  </button>
+
+  <div class="cp-panel cp-panel--floating" *ngIf="isOpen">
+    <div class="cp-panel__header">
+      <span class="cp-panel__title">{{ title }}</span>
+      <button class="cp-panel__close" (click)="toggleOpen()"><mat-icon>close</mat-icon></button>
+    </div>
+    <ng-container *ngTemplateOutlet="chatBody"></ng-container>
+  </div>
+</ng-container>
+
+<div class="cp-panel cp-panel--inline" *ngIf="!isFloating">
+  <div class="cp-panel__header">
+    <span class="cp-panel__title">{{ title }}</span>
+  </div>
+  <ng-container *ngTemplateOutlet="chatBody"></ng-container>
+</div>
+
+<ng-template #chatBody>
+  <div class="cp-messages">
+    <cp-message-item *ngFor="let msg of messages; trackBy: trackById" [message]="msg"></cp-message-item>
+    <cp-typing-indicator *ngIf="isLoading"></cp-typing-indicator>
+  </div>
+  <cp-message-input [disabled]="isLoading" (sendMessage)="sendMessage($event)"></cp-message-input>
+</ng-template>

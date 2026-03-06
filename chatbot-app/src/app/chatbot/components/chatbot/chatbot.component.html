@@ -21,6 +21,9 @@
       <h1 class="chat-title">
         {{ selectedConversation?.title || 'AI Chatbot' }}
       </h1>
+      <button mat-icon-button (click)="openPluginManagement()" matTooltip="Manage Plugins">
+        <mat-icon>extension</mat-icon>
+      </button>
       <app-voice-settings></app-voice-settings>
     </div>
 
@@ -54,6 +57,15 @@
         </div>
       </div>
     </ng-template>
+
+    <!-- Plugin strip -->
+    <div *ngIf="selectedConversation && activePlugins.length > 0" class="plugin-strip">
+      <span class="plugin-strip-label">Plugins:</span>
+      <button *ngFor="let p of activePlugins" mat-stroked-button (click)="triggerPlugin(p)"
+              [disabled]="isLoading" [matTooltip]="p.description">
+        <mat-icon>extension</mat-icon> {{ p.name }}
+      </button>
+    </div>
 
     <!-- Input -->
     <div *ngIf="selectedConversation" class="input-wrapper">

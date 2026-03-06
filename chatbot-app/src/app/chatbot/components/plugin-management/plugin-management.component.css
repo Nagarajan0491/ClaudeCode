@@ -1,0 +1,95 @@
+.dialog-container {
+  min-width: 560px;
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px 0;
+}
+
+.dialog-header h2 {
+  margin: 0;
+}
+
+.actions-bar {
+  margin-bottom: 16px;
+}
+
+.plugin-item {
+  height: auto !important;
+  padding: 8px 0;
+}
+
+.plugin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.plugin-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.plugin-desc {
+  color: #666;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.active-chip {
+  background-color: #e8f5e9 !important;
+  color: #2e7d32 !important;
+  font-size: 0.7rem;
+}
+
+.inactive-chip {
+  background-color: #fce4ec !important;
+  color: #c62828 !important;
+  font-size: 0.7rem;
+}
+
+.no-plugins {
+  color: #888;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.plugin-form-card {
+  margin-top: 16px;
+}
+
+.full-width {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.toggle-row {
+  margin: 8px 0 16px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -6,12 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enterprise AI chatbot system. Angular 21 frontend talks to a .NET 8 Web API backend that supports
 two swappable AI providers (Ollama local LLM or Google Gemini), and persists conversations in
-PostgreSQL.
+PostgreSQL. The chatbot is also embeddable as a plugin in other Angular apps via the
+`chatbot-plugin` Angular library.
 
 ```
 ChatbotSystem/
-├── ChatbotAPI/        ← .NET 8 Web API (port 5112)
-└── chatbot-app/       ← Angular 21 frontend (port 4200)
+├── ChatbotAPI/                  ← .NET 8 Web API (port 5112)
+├── chatbot-app/                 ← Angular 21 frontend (port 4200)
+│   └── projects/chatbot-plugin/ ← Embeddable Angular library (SDK)
+└── dist/chatbot-plugin/         ← Built library output (ng build chatbot-plugin)
 ```
 
 ## Prerequisites
@@ -59,6 +62,7 @@ cd chatbot-app
 ng serve                              # dev server at http://localhost:4200
 ng build                              # production build to dist/
 ng build --configuration development  # dev build
+ng build chatbot-plugin               # build the embeddable library → dist/chatbot-plugin/
 ng test                               # run unit tests (Karma)
 ng test --include='**/chat.service.spec.ts'  # single test file
 ng lint                               # ESLint
@@ -75,8 +79,9 @@ as a PostCSS plugin, which breaks the build. Tailwind v4 requires `@tailwindcss/
 
 ### Program.cs
 
-DI wiring, middleware pipeline, CORS (`localhost:4200`), `EnsureCreated()` on startup.
-Provider selection happens at startup time — the active provider is compiled into the DI container.
+DI wiring, middleware pipeline, CORS (origins read from `Cors:AllowedOrigins` in config),
+`EnsureCreated()` on startup. Provider selection happens at startup time — the active provider is
+compiled into the DI container.
 
 Reads `GEMINI_API_KEY` environment variable and injects it into `IConfiguration["Gemini:ApiKey"]`
 before validation, so the rest of the app reads the key from config only.
@@ -85,10 +90,10 @@ before validation, so the rest of the app reads the key from config only.
 
 - `Services/Interfaces/IAIProvider.cs` — interface with `GenerateResponseAsync` and
   `StreamResponseAsync`. `ChatMessage` record (Role, Content) is also defined here.
-- `Services/ChatService.cs` — `SendMessageAsync` and `StreamMessageAsync`. Prepends a system
-  prompt ("You are a helpful AI assistant. Be concise, accurate, and friendly."), appends the last
-  `HistoryLimit` messages from the conversation, then calls `IAIProvider`. Persists user and
-  assistant messages. Auto-titles the conversation from the first message content (first 50 chars).
+- `Services/ChatService.cs` — `SendMessageAsync`, `StreamMessageAsync`, and `StreamSdkMessageAsync`.
+  `BuildSystemPrompt(activePlugins, hostContext?, hostActions?)` injects host context key/value pairs
+  and host action descriptions into the system prompt when provided. Existing callers pass `null` —
+  backward-compatible. Auto-titles the conversation from the first message content (first 50 chars).
 - `Services/OllamaService.cs` — HTTP client to Ollama at `http://localhost:11434`. Calls
   `/api/chat` for both regular and streaming requests. Timeout: 5 minutes.
 - `Services/GeminiService.cs` — Uses Semantic Kernel `IChatCompletionService` registered via
@@ -193,6 +198,12 @@ dotnet run
   "Gemini": {
     "ApiKey": ""
   },
+  "Cors": {
+    "AllowedOrigins": [
+      "http://localhost:4200",
+      "http://localhost:4300"
+    ]
+  },
   "ConnectionStrings": {
     "DefaultConnection": "Host=localhost;Port=5432;Database=Chatbot;Username=postgres;Password=postgres"
   },
@@ -217,15 +228,22 @@ dotnet run
 | DELETE | `/api/conversations/{id}` | — | 204 No Content |
 | POST | `/api/chat/send-message` | `{conversationId, content, inputMethod}` | `ChatResponse` |
 | GET | `/api/chat/stream/{id}` | `?message=` | SSE stream (`text/event-stream`) |
+| POST | `/api/chat/stream-sdk` | `SdkStreamRequest` (JSON body) | SSE stream (`text/event-stream`) |
 | GET | `/api/health` | — | `{status, ollamaReachable, timestamp}` |
 
-**`SendMessageRequest` constraints:** `content` 1–10 000 chars; `inputMethod` max 20 chars
-(values: `"text"` or `"voice"`).
+**`SendMessageRequest` constraints:** `content` 1–10 000 chars; `inputMethod` max 20 chars.
+Optional SDK fields (always null from the main chatbot-app): `hostContext: Dictionary<string,string>`,
+`hostActions: List<HostActionDescriptor>`.
+
+**`SdkStreamRequest`:** `{conversationId, content, inputMethod, hostContext?, hostActions?}` —
+used by the `chatbot-plugin` library. Unlike the GET stream endpoint, this is a POST so it can
+carry a JSON body (EventSource cannot send a body).
 
 **`ChatResponse`:** `{ id, conversationId, content, role, timestamp }`
 
-**SSE format:** each event is `data: "<json-encoded-string-chunk">\n\n`. The frontend
-`EventSource` parses each chunk with `JSON.parse`.
+**SSE format:** each event is `data: "<json-encoded-string-chunk">\n\n`. Sentinel events:
+`data: "[DONE]"` (stream complete) and `data: "[STREAM_ERROR]:<message>"` (error after stream started).
+The `chatbot-plugin` uses `fetch()` + `ReadableStream` (not `EventSource`) to parse POST SSE.
 
 ---
 
@@ -318,18 +336,93 @@ are required. Both STT and TTS availability are feature-detected at runtime.
 
 ---
 
+## Chatbot Plugin SDK (`projects/chatbot-plugin/`)
+
+The chatbot is embeddable as an Angular library in other apps (CRMs, ERPs, internal tools).
+
+### Architecture
+
+```
+Host App imports ChatbotPluginModule.forRoot({ apiUrl, enableVoice, ... })
+     ↓
+<chatbot-widget [context]="{ userId, role }" theme="floating">
+     ↓  POST /api/chat/stream-sdk
+ChatbotAPI — injects hostContext + hostActions into system prompt
+     ↓  AI responds with {"action_call": {"name": "...", "parameters": {...}}}
+SDK intercepts action_call → runs host's JS callback → feeds result back to AI
+     ↓
+AI responds in natural language → displayed to user
+```
+
+### Library structure
+
+```
+projects/chatbot-plugin/src/lib/
+├── models/
+│   ├── plugin-config.interface.ts     — PluginConfig { apiUrl, enableVoice, theme, title, ... }
+│   ├── host-action.interface.ts       — HostAction (with execute fn) + HostActionDescriptor (serializable)
+│   ├── sdk-message.interface.ts       — SdkMessage { id, role, content, isStreaming, isError, ... }
+│   └── sdk-stream-request.interface.ts
+├── tokens/plugin-config.token.ts      — PLUGIN_CONFIG InjectionToken
+├── services/
+│   ├── action-registry.service.ts     — registerAction/unregisterAction/getActionDescriptors (NOT providedIn root)
+│   ├── sdk-conversation.service.ts    — lazy conversation creation, one ID per widget lifetime
+│   ├── sdk-chat.service.ts            — fetch() + ReadableStream POST SSE (not EventSource)
+│   └── sdk-voice.service.ts           — copy of VoiceService, NOT providedIn root
+└── components/
+    ├── chatbot-widget/                — floating FAB or inline panel; action_call interception loop
+    ├── sdk-message-item/              — message bubble with TTS speak button
+    ├── sdk-message-input/             — textarea + send + optional mic button
+    └── sdk-typing-indicator/          — animated dots while streaming
+```
+
+### Key design rules for the library
+
+- All components: `standalone: false`, `ChangeDetectionStrategy.OnPush`, `cdr.detectChanges()` after every state mutation (no zone.js)
+- CSS: all classes prefixed `cp-` to avoid host app style collisions
+- Services are **not** `providedIn: 'root'` — declared in `ChatbotPluginModule.providers` so each widget boundary gets its own instance
+- `ActionRegistryService.getActionDescriptors()` strips the `execute` function before sending to backend
+
+### Host app integration
+
+```typescript
+// app.module.ts
+ChatbotPluginModule.forRoot({
+  apiUrl: 'http://localhost:5112',
+  enableVoice: true,
+  theme: 'floating',
+  title: 'Support Assistant'
+})
+
+// template
+<chatbot-widget [context]="{ userId: '42', role: 'admin' }" theme="floating">
+</chatbot-widget>
+
+// register host actions
+actionRegistry.registerAction({
+  name: 'getOrders',
+  description: 'Returns recent orders for the current customer',
+  parameterSchema: '{"customerId": "string"}',
+  execute: (params) => orderService.getOrders(params['customerId'])
+});
+```
+
+### action_call flow
+
+1. AI streams a response matching `/^\s*\{"action_call"/`
+2. Widget intercepts, shows `[Executing <name>...]`
+3. Calls `hostAction.execute(parameters)` — runs host app's JavaScript callback
+4. Sends `"Action result for <name>: <result>"` back to AI via a hidden second stream call
+5. AI responds naturally — displayed to user
+
+---
+
 ## Phase Roadmap (Architecture Decisions)
 
-Phase 1 (current) is deliberately structured for later phases:
-
-- **Phase 2 (current)** — Voice input/output via Web Speech API; Gemini as a second AI provider;
-  `inputMethod` tracked per message.
-- **Phase 3 — Plugins**: `IAIProvider` is swappable; stub DB tables (`PluginRegistrations`,
-  `DataSources`, `RegisteredActions`) already in schema; `ChatService.SendMessageAsync` is the
-  single entry point where intent detection will plug in.
-- **Phase 4 — RAG**: PostgreSQL is already running; add `pgvector` extension +
-  `dotnet ef migrations add AddVectorSearch`; Semantic Kernel function calling integrates into
-  `ChatService`.
+- **Phase 2** — Voice input/output via Web Speech API; Gemini as a second AI provider; `inputMethod` tracked per message.
+- **Phase 3** — Server-side plugins: `PluginRegistrations` DB table active; `ChatService` auto-invokes plugins via `plugin_call` JSON pattern.
+- **Phase 4 (current)** — Chatbot Plugin SDK: `chatbot-plugin` Angular library; `POST /api/chat/stream-sdk`; host context + host action callbacks; floating/inline widget.
+- **Phase 5 — RAG**: add `pgvector` extension + `dotnet ef migrations add AddVectorSearch`; Semantic Kernel function calling integrates into `ChatService`.
 
 ---
 

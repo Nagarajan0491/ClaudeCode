@@ -38,5 +38,16 @@ public class ChatDbContext : DbContext
                 .HasForeignKey(e => e.ConversationId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<PluginRegistration>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(e => e.Name).IsUnique().HasDatabaseName("IX_PluginRegistrations_Name");
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.EndpointUrl).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.HttpMethod).HasMaxLength(10).HasDefaultValue("POST");
+            entity.Property(e => e.ParameterSchema).HasDefaultValue("{}");
+        });
     }
 }

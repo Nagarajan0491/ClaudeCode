@@ -100,3 +100,16 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.streaming-cursor {
+  display: inline-block;
+  color: #6b7280;
+  animation: blink 0.8s step-end infinite;
+  margin-left: 2px;
+  vertical-align: bottom;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

@@ -14,6 +14,17 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatDialogModule } from '@angular/material/dialog';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatCardModule } from '@angular/material/card';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatOption } from '@angular/material/core';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
+import { MatProgressSpinner } from '@angular/material/progress-spinner';
+
+// Chatbot Plugin
+import { ChatbotPluginModule, PLUGIN_CONFIG, PluginConfig } from 'chatbot-plugin'; // Adjust the import path as needed for naga reference
 
 // Components
 import { App } from './app';
@@ -23,9 +34,13 @@ import { MessageItemComponent } from './chatbot/components/message-item/message-
 import { MessageInputComponent } from './chatbot/components/message-input/message-input.component';
 import { TypingIndicatorComponent } from './chatbot/components/typing-indicator/typing-indicator.component';
 import { VoiceSettingsComponent } from './chatbot/components/voice-settings/voice-settings.component';
+import { PluginManagementComponent } from './chatbot/components/plugin-management/plugin-management.component';
 
 // Interceptors
 import { ErrorInterceptor } from './interceptors/error.interceptor';
+
+// Environment
+import { environment } from '../environments/environment'; // Adjust the import path as needed for naga reference
 
 @NgModule({
   declarations: [
@@ -35,7 +50,8 @@ import { ErrorInterceptor } from './interceptors/error.interceptor';
     MessageItemComponent,
     MessageInputComponent,
     TypingIndicatorComponent,
-    VoiceSettingsComponent
+    VoiceSettingsComponent,
+    PluginManagementComponent
   ],
   imports: [
     BrowserModule,
@@ -51,10 +67,28 @@ import { ErrorInterceptor } from './interceptors/error.interceptor';
     MatSnackBarModule,
     MatToolbarModule,
     MatSelectModule,
-    MatSlideToggleModule
+    MatSlideToggleModule,
+    MatDialogModule,
+    MatProgressSpinnerModule,
+    MatCardModule,
+    MatTooltipModule,
+    MatChipsModule,
+    MatOption,
+    MatSlideToggle,
+    MatProgressSpinner,
+    ChatbotPluginModule
   ],
   providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true }
+    { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
+    {
+      provide: PLUGIN_CONFIG,
+      useValue: {
+        apiUrl: environment.apiUrl,
+        enableVoice: true,
+        theme: 'floating',
+        title: 'AI Assistant'
+      } as PluginConfig
+    }
   ],
   bootstrap: [App]
 })

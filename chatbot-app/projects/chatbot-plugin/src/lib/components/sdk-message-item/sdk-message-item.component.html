@@ -1,0 +1,12 @@
+<div class="cp-message" [class.cp-message--user]="message.role === 'user'" [class.cp-message--assistant]="message.role === 'assistant'" [class.cp-message--error]="message.isError">
+  <div class="cp-message__bubble">
+    <span class="cp-message__content">{{ message.content }}</span>
+    <button *ngIf="message.role === 'assistant' && !message.isStreaming && !message.isError"
+      class="cp-message__speak-btn"
+      (click)="toggleSpeak()"
+      [title]="(voiceService.activeMessageId$ | async) === message.id ? 'Stop' : 'Speak'">
+      <mat-icon>{{ (voiceService.activeMessageId$ | async) === message.id ? 'stop' : 'volume_up' }}</mat-icon>
+    </button>
+  </div>
+  <span class="cp-message__time">{{ message.timestamp | date:'shortTime' }}</span>
+</div>

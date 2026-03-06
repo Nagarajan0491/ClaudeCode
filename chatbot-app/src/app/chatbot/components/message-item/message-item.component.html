@@ -3,8 +3,9 @@
   <div class="message-content">
     <div class="bubble" [class.user-bubble]="isUser" [class.bot-bubble]="!isUser && !message.isError" [class.error-bubble]="message.isError">
       <p class="message-text" [innerHTML]="message.content"></p>
+      <span *ngIf="message.isStreaming" class="streaming-cursor">▍</span>
     </div>
-    <div *ngIf="!isUser && !message.isError && voiceService.ttsSupported" class="playback-controls">
+    <div *ngIf="!isUser && !message.isError && !message.isStreaming && voiceService.ttsSupported" class="playback-controls">
       <button
         (click)="playMessage()"
         [disabled]="isPlaying"
@@ -24,6 +25,6 @@
         title="Stop"
       >⏹</button>
     </div>
-    <span class="timestamp">{{ formattedTime }}</span>
+    <span *ngIf="!message.isStreaming" class="timestamp">{{ formattedTime }}</span>
   </div>
 </div>

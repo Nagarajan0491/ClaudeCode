@@ -31,15 +31,23 @@ export class ChatService {
     return this.http.post<ChatResponse>(`${this.apiUrl}/api/chat/send-message`, request);
   }
 
-  streamMessage(conversationId: number, message: string): Observable<string> {
+  streamMessage(conversationId: number, message: string, inputMethod: string = 'text'): Observable<string> {
     return new Observable<string>(observer => {
-      const url = `${this.apiUrl}/api/chat/stream/${conversationId}?message=${encodeURIComponent(message)}`;
+      const url = `${this.apiUrl}/api/chat/stream/${conversationId}?message=${encodeURIComponent(message)}&inputMethod=${encodeURIComponent(inputMethod)}`;
       const eventSource = new EventSource(url);
 
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          observer.next(data);
+          if (typeof data === 'string' && data === '[DONE]') {
+            eventSource.close();
+            observer.complete();
+          } else if (typeof data === 'string' && data.startsWith('[STREAM_ERROR]:')) {
+            eventSource.close();
+            observer.error(new Error(data.slice('[STREAM_ERROR]:'.length)));
+          } else {
+            observer.next(data);
+          }
         } catch {
           observer.next(event.data);
         }
@@ -47,7 +55,7 @@ export class ChatService {
 
       eventSource.onerror = () => {
         eventSource.close();
-        observer.complete();
+        observer.error(new Error('Connection to server was lost.'));
       };
 
       return () => {
