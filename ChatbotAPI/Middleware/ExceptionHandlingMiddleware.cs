@@ -31,6 +31,7 @@ public class ExceptionHandlingMiddleware
     {
         var (statusCode, message) = ex switch
         {
+            EmbeddingException => (HttpStatusCode.ServiceUnavailable, ex.Message),
             OllamaConnectionException => (HttpStatusCode.ServiceUnavailable, ex.Message),
             GeminiConnectionException gce
                 when gce.InnerStatusCode is System.Net.HttpStatusCode.Forbidden

@@ -1,3 +1,5 @@
+import { SourceReference } from './document.interface';
+
 export interface Message {
   id: number;
   conversationId: number;
@@ -7,4 +9,5 @@ export interface Message {
   timestamp: string;
   isError?: boolean;
   isStreaming?: boolean;
+  sources?: SourceReference[];
 }

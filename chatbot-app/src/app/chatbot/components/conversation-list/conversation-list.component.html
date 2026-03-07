@@ -1,8 +1,11 @@
 <div class="sidebar">
   <div class="sidebar-header">
-    <h2 class="sidebar-title">Conversations</h2>
-    <button (click)="newConversation.emit()" class="new-chat-btn" title="New conversation">
-      + New
+    <div class="sidebar-title-row">
+      <mat-icon class="sidebar-icon">forum</mat-icon>
+      <h2 class="sidebar-title">Conversations</h2>
+    </div>
+    <button mat-icon-button (click)="newConversation.emit()" class="new-chat-btn" title="New conversation" matTooltip="New conversation">
+      <mat-icon>add</mat-icon>
     </button>
   </div>
 
@@ -33,15 +36,17 @@
       </div>
       <div class="conv-actions">
         <button
+          mat-icon-button
           class="edit-btn"
           (click)="startEdit($event, conv)"
-          title="Rename conversation"
-        >✎</button>
+          matTooltip="Rename"
+        ><mat-icon>edit</mat-icon></button>
         <button
+          mat-icon-button
           class="delete-btn"
           (click)="delete($event, conv.id)"
-          title="Delete conversation"
-        >✕</button>
+          matTooltip="Delete"
+        ><mat-icon>delete</mat-icon></button>
       </div>
     </div>
 

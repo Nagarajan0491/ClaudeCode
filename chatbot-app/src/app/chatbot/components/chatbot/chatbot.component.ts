@@ -1,16 +1,16 @@
 import { ChangeDetectorRef, Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { Conversation } from '../../models/conversation.interface';
 import { Message } from '../../models/message.interface';
-import { Plugin } from '../../models/plugin.interface';
 import { ChatService } from '../../services/chat.service';
 import { ConversationService } from '../../services/conversation.service';
 import { VoiceService } from '../../services/voice.service';
-import { PluginService } from '../../services/plugin.service';
+import { KnowledgeBaseService } from '../../services/knowledge-base.service';
 import { MessageInputComponent, MessageSentEvent } from '../message-input/message-input.component';
-import { PluginManagementComponent } from '../plugin-management/plugin-management.component';
+import { KnowledgeBaseManagementComponent } from '../knowledge-base-management/knowledge-base-management.component';
 
 @Component({
   selector: 'app-chatbot',
@@ -27,6 +27,7 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
   messages: Message[] = [];
   isLoading = false;
   sidebarOpen = true;
+  voicePanelOpen = false;
 
   private destroy$ = new Subject<void>();
   private shouldScrollToBottom = false;
@@ -35,15 +36,12 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     private chatService: ChatService,
     private conversationService: ConversationService,
     private voiceService: VoiceService,
-    private pluginService: PluginService,
-    private dialog: MatDialog,
+    private knowledgeBaseService: KnowledgeBaseService,
+    private router: Router,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     private cdr: ChangeDetectorRef
   ) {}
-
-  get activePlugins(): Plugin[] {
-    return this.pluginService.activePlugins;
-  }
 
   ngOnInit(): void {
     this.conversationService.conversations$
@@ -66,7 +64,6 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
       error: () => this.showError('Failed to load conversations. Is the backend running?')
     });
 
-    this.pluginService.loadPlugins().subscribe();
   }
 
   ngAfterViewChecked(): void {
@@ -81,40 +78,8 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.destroy$.complete();
   }
 
-  openPluginManagement(): void {
-    this.dialog.open(PluginManagementComponent, { width: '620px' });
-  }
-
-  triggerPlugin(plugin: Plugin): void {
-    if (!this.selectedConversation) return;
-    const conversationId = this.selectedConversation.id;
-    this.isLoading = true;
-    this.cdr.detectChanges();
-
-    this.pluginService.executePlugin(plugin.id).subscribe({
-      next: (result) => {
-        this.isLoading = false;
-        const content = result.success
-          ? `**Plugin: ${plugin.name}**\n\n${result.output ?? 'No output returned.'}`
-          : `**Plugin: ${plugin.name} (failed)**\n\n${result.error ?? 'Unknown error.'}`;
-        const pluginMessage: Message = {
-          id: -Date.now(),
-          conversationId,
-          role: 'assistant',
-          content,
-          inputMethod: 'text',
-          timestamp: new Date().toISOString()
-        };
-        this.messages.push(pluginMessage);
-        this.shouldScrollToBottom = true;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.isLoading = false;
-        this.showError(`Failed to execute plugin "${plugin.name}".`);
-        this.cdr.detectChanges();
-      }
-    });
+  goToAdmin(): void {
+    this.router.navigate(['/admin']);
   }
 
   selectConversation(conversation: Conversation): void {
@@ -239,12 +204,16 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.isLoading = false;
           const idx = this.messages.findIndex(m => m.id === streamingMessageId);
           if (idx !== -1) {
-            const finalMessage = { ...this.messages[idx], isStreaming: false };
+            const sources = this.chatService.lastSources$.value;
+            const finalMessage = {
+              ...this.messages[idx],
+              isStreaming: false,
+              sources: sources.length > 0 ? sources : undefined
+            };
             this.messages[idx] = finalMessage;
             this.shouldScrollToBottom = true;
             this.cdr.detectChanges();
-
-            if (inputMethod === 'voice' || this.voiceService.autoPlay$.value) {
+            if (this.voiceService.autoPlay$.value && !finalMessage.isError) {
               this.voiceService.speakMessage(finalMessage.id, finalMessage.content);
             }
           }
@@ -261,6 +230,23 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   toggleSidebar(): void {
     this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  toggleVoicePanel(): void {
+    this.voicePanelOpen = !this.voicePanelOpen;
+    this.cdr.detectChanges();
+  }
+
+  closeVoicePanel(): void {
+    this.voicePanelOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  openKnowledgeBase(): void {
+    this.dialog.open(KnowledgeBaseManagementComponent, {
+      width: '620px',
+      maxHeight: '90vh'
+    });
   }
 
   private scrollToBottom(): void {

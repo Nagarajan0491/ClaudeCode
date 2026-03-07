@@ -4,6 +4,7 @@ using ChatbotAPI.Services;
 using ChatbotAPI.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
+using Npgsql;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,9 +33,14 @@ builder.Services.AddCors(options =>
               .AllowCredentials());
 });
 
-// Database
+// Database — use NpgsqlDataSourceBuilder to register pgvector type mapping
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+dataSourceBuilder.UseVector();
+var npgsqlDataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<ChatDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(npgsqlDataSource));
 
 // AI provider — selected via AIProvider:Provider config key
 var providerName = builder.Configuration.GetValue<string>("AIProvider:Provider", "Ollama");
@@ -71,6 +77,9 @@ builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IPluginService, PluginService>();
+builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
+builder.Services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
+builder.Services.AddScoped<IRAGService, RAGService>();
 
 var app = builder.Build();
 
@@ -81,8 +90,8 @@ if (app.Environment.IsDevelopment())
 }
 
 // Middleware pipeline
-app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<LoggingMiddleware>();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors("AllowAngular");
 app.UseAuthorization();
@@ -94,7 +103,11 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
     try
     {
+        db.Database.ExecuteSqlRaw("CREATE EXTENSION IF NOT EXISTS vector");
         db.Database.EnsureCreated();
+        // EF Core 8 cannot map Vector natively — add the column outside EF Core's model
+        db.Database.ExecuteSqlRaw(
+            "ALTER TABLE \"DocumentChunks\" ADD COLUMN IF NOT EXISTS \"Embedding\" vector(768)");
         Log.Information("Database schema verified/created successfully");
     }
     catch (Exception ex)

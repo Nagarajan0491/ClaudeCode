@@ -29,22 +29,24 @@
 }
 
 .chat-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 8px;
   align-items: center;
-  justify-content: space-between;
   padding: 12px 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   min-height: 64px;
+  position: relative;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  margin: 0 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .header-icon {
@@ -58,10 +60,34 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .header-actions button {
   color: white;
+}
+
+.header-actions button.panel-active {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.voice-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+}
+
+.voice-panel {
+  position: absolute;
+  top: 64px;
+  right: 0;
+  z-index: 20;
+  background: white;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px 20px;
+  min-width: 300px;
 }
 
 .toggle-sidebar-btn {
@@ -90,6 +116,12 @@
   overflow-y: auto;
   padding: 20px;
   scroll-behavior: smooth;
+}
+
+.messages-scroll > * {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .messages-scroll::-webkit-scrollbar {
@@ -185,6 +217,7 @@
 .input-wrapper {
   border-top: 1px solid #e5e7eb;
   background: white;
+  flex-shrink: 0;
 }
 
 .plugin-strip {

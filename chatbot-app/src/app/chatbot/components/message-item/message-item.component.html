@@ -2,34 +2,47 @@
   <div class="avatar">{{ isUser ? '🧑' : '🤖' }}</div>
   <div class="message-content">
     <div class="bubble" [class.user-bubble]="isUser" [class.bot-bubble]="!isUser && !message.isError" [class.error-bubble]="message.isError">
-      <p class="message-text" [innerHTML]="message.content"></p>
+      <div class="message-text" [innerHTML]="message.content | markdown"></div>
       <span *ngIf="message.isStreaming" class="streaming-cursor">▍</span>
     </div>
-    <div *ngIf="!isUser && !message.isError && !message.isStreaming && voiceService.ttsSupported" class="playback-controls">
-      <button
-        (click)="playMessage()"
-        [disabled]="isPlaying"
-        class="ctrl-btn"
-        title="Play message"
-      >
+    <div
+      *ngIf="!isUser && !message.isError && !message.isStreaming && voiceService.ttsSupported"
+      class="playback-controls"
+    >
+      <button *ngIf="!isPlaying && !isPaused" (click)="playMessage()" matTooltip="Play" class="ctrl-btn">
         <mat-icon>play_arrow</mat-icon>
       </button>
-      <button
-        (click)="pauseMessage()"
-        [disabled]="!isPlaying"
-        class="ctrl-btn"
-        title="Pause"
-      >
+      <button *ngIf="isPlaying" (click)="pauseMessage()" matTooltip="Pause" class="ctrl-btn">
         <mat-icon>pause</mat-icon>
       </button>
-      <button
-        (click)="stopMessage()"
-        [disabled]="!isPlaying && !isPaused"
-        class="ctrl-btn"
-        title="Stop"
-      >
+      <button *ngIf="isPaused" (click)="playMessage()" matTooltip="Resume" class="ctrl-btn">
+        <mat-icon>play_arrow</mat-icon>
+      </button>
+      <button *ngIf="isPlaying || isPaused" (click)="stopMessage()" matTooltip="Stop" class="ctrl-btn">
         <mat-icon>stop</mat-icon>
       </button>
+    </div>
+    <div *ngIf="!isUser && message.sources?.length" class="sources-section">
+      <button class="sources-toggle" (click)="sourcesExpanded = !sourcesExpanded">
+        <mat-icon class="src-icon">auto_stories</mat-icon>
+        <span>{{ message.sources!.length }} source{{ message.sources!.length !== 1 ? 's' : '' }} used</span>
+        <mat-icon class="chevron" [class.rotated]="sourcesExpanded">expand_more</mat-icon>
+      </button>
+      <div class="sources-cards" *ngIf="sourcesExpanded">
+        <div *ngFor="let s of message.sources; let i = index" class="source-card">
+          <div class="source-num">{{ i + 1 }}</div>
+          <div class="source-body">
+            <div class="source-title">{{ s.documentTitle }}</div>
+            <div class="source-meta">
+              <mat-icon class="doc-icon">description</mat-icon>
+              <div class="sim-bar-wrap">
+                <div class="sim-bar" [style.width.%]="s.similarity * 100"></div>
+              </div>
+              <span class="sim-pct">{{ (s.similarity * 100).toFixed(0) }}% match</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <span *ngIf="!message.isStreaming" class="timestamp">{{ formattedTime }}</span>
   </div>

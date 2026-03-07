@@ -1,5 +1,5 @@
-import { Component, EventEmitter, Input, Output, ElementRef, ViewChild, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import { Subject, Subscription, takeUntil } from 'rxjs';
+import { Component, EventEmitter, Input, Output, ElementRef, ViewChild, ChangeDetectorRef, OnInit, OnDestroy } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { VoiceService } from '../../services/voice.service';
 
 export interface MessageSentEvent {
@@ -22,24 +22,36 @@ export class MessageInputComponent implements OnInit, OnDestroy {
   content = '';
   maxLength = 10000;
   isListening = false;
+  isVoiceInput = false;
 
-  private isVoiceInput = false;
-  private transcriptSub?: Subscription;
-  private destroy$ = new Subject<void>();
+  private transcriptSub: Subscription | null = null;
+  private listeningSub: Subscription | null = null;
 
-  constructor(public voiceService: VoiceService, private cdr: ChangeDetectorRef) {}
+  constructor(
+    public voiceService: VoiceService,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngOnInit(): void {
-    this.voiceService.isListening$.pipe(takeUntil(this.destroy$)).subscribe(val => {
-      this.isListening = val;
-      this.cdr.detectChanges();
-    });
+    if (this.voiceService.sttSupported) {
+      this.listeningSub = this.voiceService.isListening$.subscribe(val => {
+        this.isListening = val;
+        this.cdr.detectChanges();
+      });
+      this.transcriptSub = this.voiceService.transcript$.subscribe(text => {
+        if (text) {
+          this.content = text;
+          this.isVoiceInput = true;
+          this.autoResize();
+          this.cdr.detectChanges();
+        }
+      });
+    }
   }
 
   ngOnDestroy(): void {
     this.transcriptSub?.unsubscribe();
-    this.destroy$.next();
-    this.destroy$.complete();
+    this.listeningSub?.unsubscribe();
   }
 
   get charCount(): number {
@@ -62,37 +74,8 @@ export class MessageInputComponent implements OnInit, OnDestroy {
   }
 
   onInput(): void {
+    this.isVoiceInput = false;
     this.autoResize();
-    if (!this.isListening) {
-      this.isVoiceInput = false;
-    }
-  }
-
-  toggleRecording(): void {
-    if (this.isListening) {
-      // Signal the browser to stop. recognition.stop() is asynchronous — it fires
-      // one final onresult event with the complete transcript before onend fires.
-      // Keep the subscription alive so that final event can update this.content.
-      this.voiceService.stopListening();
-    } else {
-      // Clean up any subscription left over from the previous recording, then
-      // start a fresh one. Tearing it down here (not on stop) ensures the final
-      // transcript from the previous session is never missed.
-      this.transcriptSub?.unsubscribe();
-      this.isVoiceInput = true;
-      this.content = '';
-      this.voiceService.startListening();
-      this.transcriptSub = this.voiceService.transcript$.pipe(takeUntil(this.destroy$)).subscribe(text => {
-        // No isListening guard here — the final transcript arrives AFTER
-        // isListening flips to false, so the guard would silently drop it.
-        // Skip the empty string that BehaviorSubject emits on subscription.
-        if (text) {
-          this.content = text;
-          this.autoResize();
-          this.cdr.detectChanges();
-        }
-      });
-    }
   }
 
   send(): void {
@@ -102,11 +85,20 @@ export class MessageInputComponent implements OnInit, OnDestroy {
     this.messageSent.emit({ content: trimmed, inputMethod });
     this.content = '';
     this.isVoiceInput = false;
-    this.transcriptSub?.unsubscribe();
+    if (this.voiceService.sttSupported) this.voiceService.stopListening();
+    this.autoResize();
+  }
+
+  toggleRecording(): void {
     if (this.isListening) {
       this.voiceService.stopListening();
+    } else {
+      this.voiceService.transcript$.next('');
+      this.content = '';
+      this.isVoiceInput = false;
+      this.voiceService.startListening();
     }
-    this.autoResize();
+    this.cdr.detectChanges();
   }
 
   focus(): void {
@@ -116,10 +108,7 @@ export class MessageInputComponent implements OnInit, OnDestroy {
   reset(): void {
     this.content = '';
     this.isVoiceInput = false;
-    this.transcriptSub?.unsubscribe();
-    if (this.isListening) {
-      this.voiceService.stopListening();
-    }
+    if (this.voiceService.sttSupported) this.voiceService.stopListening();
     this.autoResize();
   }
 

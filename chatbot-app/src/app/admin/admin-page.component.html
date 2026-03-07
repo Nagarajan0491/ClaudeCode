@@ -1,0 +1,173 @@
+<div class="admin-page">
+
+  <!-- Header -->
+  <div class="admin-header">
+    <div class="header-left">
+      <div class="header-icon-wrap">
+        <mat-icon>admin_panel_settings</mat-icon>
+      </div>
+      <div>
+        <h1 class="header-title">Knowledge Base Admin</h1>
+        <p class="header-sub">Manage documents indexed for AI responses</p>
+      </div>
+    </div>
+    <button class="back-btn" (click)="goToChat()">
+      <mat-icon>arrow_back</mat-icon>
+      Back to Chat
+    </button>
+  </div>
+
+  <!-- Upload Card -->
+  <div class="section-card">
+    <div class="section-header">
+      <div class="section-icon-wrap">
+        <mat-icon>cloud_upload</mat-icon>
+      </div>
+      <div>
+        <h2 class="section-title">Upload Document</h2>
+        <p class="section-sub">Supported formats: .txt, .md, .pdf, .pptx</p>
+      </div>
+    </div>
+
+    <!-- Drop zone -->
+    <div
+      class="drop-zone"
+      [class.has-file]="selectedFile"
+      (click)="!selectedFile && fileInput.click()"
+    >
+      <input
+        type="file"
+        accept=".txt,.md,.pdf,.pptx"
+        (change)="onFileSelected($event)"
+        class="file-input-hidden"
+        #fileInput
+      >
+
+      <div class="drop-empty" *ngIf="!selectedFile">
+        <mat-icon class="drop-icon">upload_file</mat-icon>
+        <p class="drop-text">Click to browse files</p>
+        <p class="drop-hint">.txt · .md · .pdf · .pptx</p>
+        <button class="browse-btn" type="button" (click)="$event.stopPropagation(); fileInput.click()">
+          <mat-icon>folder_open</mat-icon>
+          Browse
+        </button>
+      </div>
+
+      <div class="drop-file" *ngIf="selectedFile" (click)="$event.stopPropagation()">
+        <div class="file-icon-wrap">
+          <mat-icon>description</mat-icon>
+        </div>
+        <div class="file-details">
+          <span class="file-name">{{ selectedFile.name }}</span>
+          <span class="file-size">{{ (selectedFile.size / 1024).toFixed(1) }} KB</span>
+        </div>
+        <button class="clear-file-btn" type="button" (click)="clearFile()" matTooltip="Remove file">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Title input -->
+    <div class="form-group">
+      <label class="form-label">
+        Document Title
+        <span class="optional-badge">optional</span>
+      </label>
+      <input
+        type="text"
+        class="form-input"
+        placeholder="Enter a descriptive title…"
+        [(ngModel)]="docTitle"
+      >
+    </div>
+
+    <!-- Upload button -->
+    <button
+      class="upload-btn"
+      [class.uploading]="isUploading"
+      [disabled]="!selectedFile || isUploading"
+      (click)="upload()"
+    >
+      <mat-icon>{{ isUploading ? 'hourglass_empty' : 'cloud_upload' }}</mat-icon>
+      {{ isUploading ? 'Uploading…' : 'Upload Document' }}
+    </button>
+
+    <!-- Success -->
+    <div *ngIf="uploadResult" class="alert alert-success">
+      <mat-icon>check_circle</mat-icon>
+      <span>
+        Uploaded <strong>{{ uploadResult.title }}</strong> —
+        {{ uploadResult.totalChunks }} chunk{{ uploadResult.totalChunks !== 1 ? 's' : '' }} indexed
+      </span>
+    </div>
+
+    <!-- Error -->
+    <div *ngIf="errorMessage" class="alert alert-error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage }}</span>
+    </div>
+  </div>
+
+  <!-- Documents Table Card -->
+  <div class="section-card">
+    <div class="section-header">
+      <div class="section-icon-wrap secondary">
+        <mat-icon>storage</mat-icon>
+      </div>
+      <div>
+        <h2 class="section-title">Knowledge Base Documents</h2>
+        <p class="section-sub">
+          {{ documents.length }} document{{ documents.length !== 1 ? 's' : '' }} indexed
+        </p>
+      </div>
+    </div>
+
+    <div class="table-wrap" *ngIf="documents.length > 0">
+      <table class="docs-table">
+        <thead>
+          <tr>
+            <th class="col-id">ID</th>
+            <th class="col-title">Title</th>
+            <th class="col-chunks">Chunks</th>
+            <th class="col-date">Uploaded</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let doc of documents">
+            <td class="col-id">
+              <span class="id-badge">#{{ doc.id }}</span>
+            </td>
+            <td class="col-title">
+              <div class="title-cell">
+                <mat-icon class="row-icon">description</mat-icon>
+                <span>{{ doc.title }}</span>
+              </div>
+            </td>
+            <td class="col-chunks">
+              <span class="chunk-badge">{{ doc.totalChunks }}</span>
+            </td>
+            <td class="col-date">{{ doc.uploadedAt | date:'M/d/yy, h:mm a' }}</td>
+            <td class="col-actions">
+              <button
+                class="delete-btn"
+                (click)="deleteDocument(doc.id)"
+                matTooltip="Delete document"
+              >
+                <mat-icon>delete</mat-icon>
+                Delete
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="documents.length === 0" class="empty-state">
+      <mat-icon class="empty-icon">inbox</mat-icon>
+      <p class="empty-title">No documents yet</p>
+      <p class="empty-hint">Upload a document above to start building the knowledge base.</p>
+    </div>
+  </div>
+
+</div>

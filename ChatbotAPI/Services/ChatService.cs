@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using ChatbotAPI.Data.Models;
 using ChatbotAPI.DTOs;
 using ChatbotAPI.Exceptions;
@@ -13,6 +14,7 @@ public class ChatService : IChatService
     private readonly IConversationRepository _conversationRepository;
     private readonly IMessageRepository _messageRepository;
     private readonly IPluginService _pluginService;
+    private readonly IRAGService _ragService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ChatService> _logger;
 
@@ -21,6 +23,7 @@ public class ChatService : IChatService
         IConversationRepository conversationRepository,
         IMessageRepository messageRepository,
         IPluginService pluginService,
+        IRAGService ragService,
         IConfiguration configuration,
         ILogger<ChatService> logger)
     {
@@ -28,6 +31,7 @@ public class ChatService : IChatService
         _conversationRepository = conversationRepository;
         _messageRepository = messageRepository;
         _pluginService = pluginService;
+        _ragService = ragService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -51,9 +55,12 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(userMessage, cancellationToken);
 
-        // Build system prompt with plugin awareness
+        // RAG: retrieve context before building system prompt
+        var ragResult = await _ragService.RetrieveContextAsync(request.Content, cancellationToken);
+
+        // Build system prompt with plugin awareness and RAG context
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var systemPrompt = BuildSystemPrompt(activePlugins, request.HostContext, request.HostActions);
+        var systemPrompt = BuildSystemPrompt(activePlugins, request.HostContext, request.HostActions, ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var messages = new List<ChatMessage> { new("system", systemPrompt) };
@@ -121,7 +128,8 @@ public class ChatService : IChatService
             ConversationId = request.ConversationId,
             Content = aiResponse,
             Role = "assistant",
-            Timestamp = assistantMessage.Timestamp
+            Timestamp = assistantMessage.Timestamp,
+            Sources = ragResult.Sources.Count > 0 ? ragResult.Sources.ToList() : null
         };
     }
 
@@ -145,8 +153,11 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(userMessage, cancellationToken);
 
+        // RAG: retrieve context before streaming
+        var ragResult = await _ragService.RetrieveContextAsync(message, cancellationToken);
+
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var systemPrompt = BuildSystemPrompt(activePlugins);
+        var systemPrompt = BuildSystemPrompt(activePlugins, ragContextBlock: ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var chatMessages = new List<ChatMessage> { new("system", systemPrompt) };
@@ -177,7 +188,7 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(assistantMessage, cancellationToken);
 
-        // Auto-title on first message (no prior messages means conversation.Messages was empty before this)
+        // Auto-title on first message
         if (!conversation.Messages.Any())
         {
             try
@@ -201,6 +212,10 @@ public class ChatService : IChatService
                 await _conversationRepository.UpdateTitleAsync(conversationId, title, cancellationToken);
             }
         }
+
+        // Emit sources sentinel for frontend to pick up
+        if (ragResult.Sources.Count > 0)
+            yield return $"[SOURCES]:{JsonSerializer.Serialize(ragResult.Sources)}";
     }
 
     public async IAsyncEnumerable<string> StreamSdkMessageAsync(
@@ -223,8 +238,11 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(userMessage, cancellationToken);
 
+        // RAG: retrieve context before streaming
+        var ragResult = await _ragService.RetrieveContextAsync(request.Content, cancellationToken);
+
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var systemPrompt = BuildSystemPrompt(activePlugins, request.HostContext, request.HostActions);
+        var systemPrompt = BuildSystemPrompt(activePlugins, request.HostContext, request.HostActions, ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var chatMessages = new List<ChatMessage> { new("system", systemPrompt) };
@@ -277,14 +295,28 @@ public class ChatService : IChatService
                 await _conversationRepository.UpdateTitleAsync(request.ConversationId, title, cancellationToken);
             }
         }
+
+        // Emit sources sentinel for SDK frontend
+        if (ragResult.Sources.Count > 0)
+            yield return $"[SOURCES]:{JsonSerializer.Serialize(ragResult.Sources)}";
     }
 
     private static string BuildSystemPrompt(
         List<PluginRegistration> activePlugins,
         Dictionary<string, string>? hostContext = null,
-        List<HostActionDescriptor>? hostActions = null)
+        List<HostActionDescriptor>? hostActions = null,
+        string? ragContextBlock = null)
     {
         var sb = new StringBuilder("You are a helpful AI assistant. Be concise, accurate, and friendly.");
+
+        if (!string.IsNullOrWhiteSpace(ragContextBlock))
+        {
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.Append(ragContextBlock.TrimEnd());
+            sb.AppendLine();
+            sb.Append("Use the above knowledge base context to answer accurately when relevant. If the context doesn't cover the question, answer from your general knowledge.");
+        }
 
         if (hostContext is { Count: > 0 })
         {

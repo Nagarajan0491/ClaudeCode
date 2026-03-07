@@ -1,17 +1,5 @@
 <div class="input-container">
   <div class="input-row">
-    <button
-      *ngIf="voiceService.sttSupported"
-      mat-icon-button
-      (click)="toggleRecording()"
-      [class.recording]="isListening"
-      [disabled]="isLoading"
-      class="mic-button"
-      matTooltip="{{ isListening ? 'Stop recording' : 'Start voice input' }}"
-    >
-      <mat-icon>{{ isListening ? 'mic' : 'mic_none' }}</mat-icon>
-    </button>
-    
     <div class="textarea-wrapper">
       <textarea
         #textArea
@@ -24,7 +12,19 @@
         class="message-textarea"
       ></textarea>
     </div>
-    
+
+    <button
+      *ngIf="voiceService.sttSupported"
+      mat-icon-button
+      (click)="toggleRecording()"
+      [disabled]="isLoading"
+      class="mic-button"
+      [class.recording]="isListening"
+      matTooltip="{{ isListening ? 'Stop recording' : 'Voice input' }}"
+    >
+      <mat-icon>{{ isListening ? 'mic' : 'mic_none' }}</mat-icon>
+    </button>
+
     <button
       mat-icon-button
       (click)="send()"
@@ -36,15 +36,13 @@
       <mat-icon>{{ isLoading ? 'hourglass_empty' : 'send' }}</mat-icon>
     </button>
   </div>
-  
+
   <div class="input-footer" *ngIf="isListening || charCount > maxLength * 0.8">
-    <div class="footer-left">
-      <span class="char-count" [class.over-limit]="isOverLimit">
-        {{ charCount }}/{{ maxLength }}
-      </span>
-      <span *ngIf="isListening" class="recording-indicator">
-        <span class="recording-dot"></span> Recording...
-      </span>
-    </div>
+    <span *ngIf="isListening" class="recording-indicator">
+      <span class="recording-dot"></span> Listening…
+    </span>
+    <span class="char-count" [class.over-limit]="isOverLimit" *ngIf="charCount > maxLength * 0.8">
+      {{ charCount }}/{{ maxLength }}
+    </span>
   </div>
 </div>

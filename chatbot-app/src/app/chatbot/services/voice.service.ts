@@ -1,13 +1,15 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { Injectable, Inject, PLATFORM_ID, OnDestroy } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { BehaviorSubject, Subscription } from 'rxjs';
 
-@Injectable({
-  providedIn: 'root'
-})
-export class VoiceService {
+@Injectable({ providedIn: 'root' })
+export class VoiceService implements OnDestroy {
   private recognition: any = null;
-  private synthesis: SpeechSynthesis = window.speechSynthesis;
+  private synthesis: SpeechSynthesis | null = null;
   private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private beforeUnloadHandler: (() => void) | null = null;
+  private autoPlaySub: Subscription | null = null;
+  private readonly isBrowser: boolean;
 
   readonly transcript$ = new BehaviorSubject<string>('');
   readonly isListening$ = new BehaviorSubject<boolean>(false);
@@ -15,32 +17,48 @@ export class VoiceService {
   readonly isPaused$ = new BehaviorSubject<boolean>(false);
   readonly activeMessageId$ = new BehaviorSubject<number | null>(null);
   readonly voices$ = new BehaviorSubject<SpeechSynthesisVoice[]>([]);
-  readonly autoPlay$ = new BehaviorSubject<boolean>(
-    localStorage.getItem('voice_autoplay') === 'true'
-  );
-  readonly selectedVoiceName$ = new BehaviorSubject<string>(
-    localStorage.getItem('voice_preferred_name') ?? ''
-  );
+  readonly autoPlay$: BehaviorSubject<boolean>;
+  readonly selectedVoiceName$: BehaviorSubject<string>;
 
   selectedVoice: SpeechSynthesisVoice | null = null;
 
-  get rate(): number { return parseFloat(localStorage.getItem('voice_rate') ?? '1'); }
-  set rate(v: number) { localStorage.setItem('voice_rate', String(v)); }
+  get rate(): number {
+    return this.isBrowser ? parseFloat(localStorage.getItem('voice_rate') ?? '1') : 1;
+  }
+  set rate(v: number) {
+    if (this.isBrowser) localStorage.setItem('voice_rate', String(v));
+  }
 
-  get pitch(): number { return parseFloat(localStorage.getItem('voice_pitch') ?? '1'); }
-  set pitch(v: number) { localStorage.setItem('voice_pitch', String(v)); }
+  get pitch(): number {
+    return this.isBrowser ? parseFloat(localStorage.getItem('voice_pitch') ?? '1') : 1;
+  }
+  set pitch(v: number) {
+    if (this.isBrowser) localStorage.setItem('voice_pitch', String(v));
+  }
 
   readonly sttSupported: boolean;
   readonly ttsSupported: boolean;
 
-  constructor() {
-    this.sttSupported = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
-    this.ttsSupported = 'speechSynthesis' in window;
+  constructor(@Inject(PLATFORM_ID) platformId: object) {
+    this.isBrowser = isPlatformBrowser(platformId);
 
-    // Cancel any in-progress speech when the page is unloaded / refreshed.
-    window.addEventListener('beforeunload', () => {
-      if (this.ttsSupported) this.synthesis.cancel();
-    });
+    this.autoPlay$ = new BehaviorSubject<boolean>(
+      this.isBrowser ? localStorage.getItem('voice_autoplay') === 'true' : false
+    );
+    this.selectedVoiceName$ = new BehaviorSubject<string>(
+      this.isBrowser ? (localStorage.getItem('voice_preferred_name') ?? '') : ''
+    );
+
+    this.sttSupported = this.isBrowser &&
+      ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+    this.ttsSupported = this.isBrowser && ('speechSynthesis' in window);
+
+    if (this.isBrowser) {
+      this.beforeUnloadHandler = () => {
+        if (this.ttsSupported) this.synthesis!.cancel();
+      };
+      window.addEventListener('beforeunload', this.beforeUnloadHandler);
+    }
 
     if (this.sttSupported) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -67,8 +85,9 @@ export class VoiceService {
     }
 
     if (this.ttsSupported) {
+      this.synthesis = window.speechSynthesis;
       const loadVoices = () => {
-        const voices = this.synthesis.getVoices();
+        const voices = this.synthesis!.getVoices();
         if (voices.length > 0) {
           this.voices$.next(voices);
           this.restoreOrAutoSelect(voices);
@@ -78,7 +97,18 @@ export class VoiceService {
       loadVoices();
     }
 
-    this.autoPlay$.subscribe(val => localStorage.setItem('voice_autoplay', String(val)));
+    if (this.isBrowser) {
+      this.autoPlaySub = this.autoPlay$.subscribe(val =>
+        localStorage.setItem('voice_autoplay', String(val))
+      );
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.isBrowser && this.beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+    }
+    this.autoPlaySub?.unsubscribe();
   }
 
   private restoreOrAutoSelect(voices: SpeechSynthesisVoice[]): void {
@@ -101,7 +131,7 @@ export class VoiceService {
       this.selectedVoice = found;
       this.pitch = 0.85;
       this.rate = 0.9;
-      localStorage.setItem('voice_preferred_name', found.name);
+      if (this.isBrowser) localStorage.setItem('voice_preferred_name', found.name);
       this.selectedVoiceName$.next(found.name);
     }
     return found ?? null;
@@ -121,21 +151,19 @@ export class VoiceService {
   }
 
   speakMessage(messageId: number, text: string): void {
-    // Call speak() first — it internally calls stop() which resets activeMessageId$ to null.
-    // Set activeMessageId$ afterwards so it is non-null when onstart fires.
     this.speak(text);
     this.activeMessageId$.next(messageId);
   }
 
   private sanitizeForTts(text: string): string {
     return text
-      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') // emojis
-      .replace(/#{1,6}\s+/g, '')           // markdown headings
-      .replace(/\*\*(.+?)\*\*/g, '$1')     // bold **text**
-      .replace(/\*(.+?)\*/g, '$1')         // italic *text*
-      .replace(/`{1,3}[^`]*`{1,3}/g, '')  // inline code / code blocks
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links [label](url)
-      .replace(/[_~>|]/g, '')              // underscores, strikethrough, blockquotes, tables
+      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/`{1,3}[^`]*`{1,3}/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/[_~>|]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -164,26 +192,26 @@ export class VoiceService {
       this.activeMessageId$.next(null);
     };
     this.currentUtterance = utterance;
-    this.synthesis.speak(utterance);
+    this.synthesis!.speak(utterance);
   }
 
   pause(): void {
     if (!this.ttsSupported) return;
-    this.synthesis.pause();
+    this.synthesis!.pause();
     this.isSpeaking$.next(false);
     this.isPaused$.next(true);
   }
 
   resume(): void {
     if (!this.ttsSupported) return;
-    this.synthesis.resume();
+    this.synthesis!.resume();
     this.isSpeaking$.next(true);
     this.isPaused$.next(false);
   }
 
   stop(): void {
     if (!this.ttsSupported) return;
-    this.synthesis.cancel();
+    this.synthesis!.cancel();
     this.isSpeaking$.next(false);
     this.isPaused$.next(false);
     this.currentUtterance = null;

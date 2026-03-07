@@ -1,95 +1,100 @@
 .dialog-container {
-  min-width: 560px;
+  width: 620px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .dialog-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 16px 24px 0;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .dialog-header h2 {
   margin: 0;
+  font-size: 20px;
+  font-weight: 600;
 }
 
-.actions-bar {
-  margin-bottom: 16px;
+.dialog-body {
+  padding: 16px 24px;
+  overflow-y: auto;
+  max-height: 450px;
 }
 
-.plugin-item {
-  height: auto !important;
-  padding: 8px 0;
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
 }
 
 .plugin-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
 }
 
 .plugin-info {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   flex: 1;
-  min-width: 0;
 }
 
 .plugin-name {
   font-weight: 600;
-  white-space: nowrap;
+  font-size: 14px;
 }
 
 .plugin-desc {
-  color: #666;
-  font-size: 0.85rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.plugin-url {
+  font-size: 12px;
+  color: #9ca3af;
+  font-family: monospace;
 }
 
 .plugin-actions {
   display: flex;
-  gap: 4px;
-  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
 }
 
-.active-chip {
-  background-color: #e8f5e9 !important;
-  color: #2e7d32 !important;
-  font-size: 0.7rem;
-}
-
-.inactive-chip {
-  background-color: #fce4ec !important;
-  color: #c62828 !important;
-  font-size: 0.7rem;
-}
-
-.no-plugins {
-  color: #888;
+.empty {
   text-align: center;
-  padding: 24px 0;
+  color: #9ca3af;
+  padding: 32px;
 }
 
-.plugin-form-card {
-  margin-top: 16px;
+.add-form {
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .full-width {
   width: 100%;
-  margin-bottom: 8px;
-}
-
-.toggle-row {
-  margin: 8px 0 16px;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
 }

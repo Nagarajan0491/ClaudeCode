@@ -47,20 +47,34 @@
 }
 
 .mic-button {
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  cursor: pointer;
   color: #6b7280;
-  transition: all 0.2s ease;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
   flex-shrink: 0;
+  width: 42px !important;
+  height: 42px !important;
 }
 
-.mic-button:not(:disabled):hover {
+.mic-button:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #667eea;
   color: #667eea;
-  background: rgba(102, 126, 234, 0.1);
+  transform: scale(1.05);
 }
 
 .mic-button.recording {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444 !important;
+  background: #fee2e2 !important;
+  border-color: #ef4444 !important;
   animation: pulse-mic 1.5s ease-in-out infinite;
+}
+
+.mic-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @keyframes pulse-mic {
@@ -70,22 +84,29 @@
 
 .send-button {
   color: #9ca3af;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  width: 42px !important;
+  height: 42px !important;
 }
 
 .send-button.can-send {
   color: white;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.35);
 }
 
 .send-button.can-send:not(:disabled):hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(102, 126, 234, 0.5);
 }
 
 .send-button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -134,51 +155,4 @@
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.3; transform: scale(0.7); }
-}
-
-.mic-button {
-  background: transparent;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 7px 10px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s, border-color 0.2s;
-  line-height: 1;
-}
-
-.mic-button:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #9ca3af;
-}
-
-.mic-button.recording {
-  background: #fee2e2;
-  border-color: #ef4444;
-}
-
-.mic-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.send-button {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 20px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.send-button:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.send-button:disabled {
-  background: #93c5fd;
-  cursor: not-allowed;
 }

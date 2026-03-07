@@ -8,4 +8,5 @@ public class ChatResponse
     public string Role { get; set; } = "assistant";
     public DateTime Timestamp { get; set; }
     public bool IsStreaming { get; set; } = false;
+    public List<SourceReference>? Sources { get; set; }
 }

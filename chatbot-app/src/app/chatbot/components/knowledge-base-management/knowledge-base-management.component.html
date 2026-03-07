@@ -1,0 +1,68 @@
+<div class="dialog-container">
+  <!-- Header -->
+  <div class="dialog-header">
+    <div class="header-title">
+      <mat-icon class="header-icon">auto_stories</mat-icon>
+      <h2>Knowledge Base</h2>
+    </div>
+    <button class="close-btn" (click)="close()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <!-- Body -->
+  <div class="dialog-body">
+    <!-- Loading -->
+    <div *ngIf="isLoading" class="loading">
+      <div class="css-spinner"></div>
+    </div>
+
+    <div *ngIf="!isLoading">
+      <!-- Success banner -->
+      <div *ngIf="uploadSuccess" class="alert alert-success">
+        <mat-icon>check_circle</mat-icon>
+        <span>Document uploaded successfully.</span>
+      </div>
+
+      <!-- Error banner -->
+      <div *ngIf="errorMessage" class="alert alert-error">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ errorMessage }}</span>
+      </div>
+
+      <!-- Document list -->
+      <div *ngFor="let doc of documents" class="doc-card">
+        <mat-icon class="doc-icon">description</mat-icon>
+        <div class="doc-info">
+          <span class="doc-title">{{ doc.title }}</span>
+          <span class="doc-filename">{{ doc.fileName }}</span>
+        </div>
+        <div class="doc-badges">
+          <span class="badge" [ngClass]="getFileBadgeClass(doc.fileName)">{{ getFileExt(doc.fileName) }}</span>
+          <span class="badge badge-chunks">{{ doc.totalChunks }} chunks</span>
+        </div>
+        <button class="delete-btn" (click)="deleteDocument(doc.id)" title="Delete">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+
+      <!-- Empty state -->
+      <div *ngIf="documents.length === 0 && !errorMessage" class="empty-state">
+        <mat-icon class="empty-icon">inbox</mat-icon>
+        <p>No documents in the knowledge base.</p>
+        <span>Upload a document below to get started.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer / Upload -->
+  <div class="dialog-footer">
+    <label class="upload-btn" [class.uploading]="isUploading">
+      <div *ngIf="isUploading" class="upload-spinner"></div>
+      <mat-icon *ngIf="!isUploading">cloud_upload</mat-icon>
+      <span>{{ isUploading ? 'Uploading...' : 'Upload Document' }}</span>
+      <input type="file" accept=".txt,.md,.pdf,.pptx" (change)="onFileSelected($event)" [disabled]="isUploading" class="file-input" />
+    </label>
+    <span class="upload-hint">.txt, .md, .pdf, .pptx</span>
+  </div>
+</div>

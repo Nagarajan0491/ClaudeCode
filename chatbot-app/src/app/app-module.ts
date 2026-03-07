@@ -13,21 +13,25 @@ import { MatListModule } from '@angular/material/list';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSelectModule } from '@angular/material/select';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCardModule } from '@angular/material/card';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatTableModule } from '@angular/material/table';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatOption } from '@angular/material/core';
-import { MatSlideToggle } from '@angular/material/slide-toggle';
 import { MatProgressSpinner } from '@angular/material/progress-spinner';
 
-// Chatbot Plugin
-import { ChatbotPluginModule, PLUGIN_CONFIG, PluginConfig } from 'chatbot-plugin'; // Adjust the import path as needed for naga reference
+// Routing
+import { AppRoutingModule } from './app-routing.module';
+
+// Plugin SDK
+import { ChatbotPluginModule, PLUGIN_CONFIG } from 'chatbot-plugin';
 
 // Components
 import { App } from './app';
+import { AdminPageComponent } from './admin/admin-page.component';
 import { ChatbotComponent } from './chatbot/components/chatbot/chatbot.component';
 import { ConversationListComponent } from './chatbot/components/conversation-list/conversation-list.component';
 import { MessageItemComponent } from './chatbot/components/message-item/message-item.component';
@@ -35,23 +39,30 @@ import { MessageInputComponent } from './chatbot/components/message-input/messag
 import { TypingIndicatorComponent } from './chatbot/components/typing-indicator/typing-indicator.component';
 import { VoiceSettingsComponent } from './chatbot/components/voice-settings/voice-settings.component';
 import { PluginManagementComponent } from './chatbot/components/plugin-management/plugin-management.component';
+import { KnowledgeBaseManagementComponent } from './chatbot/components/knowledge-base-management/knowledge-base-management.component';
+
+// Pipes
+import { MarkdownPipe } from './chatbot/pipes/markdown.pipe';
 
 // Interceptors
 import { ErrorInterceptor } from './interceptors/error.interceptor';
 
 // Environment
-import { environment } from '../environments/environment'; // Adjust the import path as needed for naga reference
+import { environment } from '../environments/environment';
 
 @NgModule({
   declarations: [
     App,
+    AdminPageComponent,
     ChatbotComponent,
     ConversationListComponent,
     MessageItemComponent,
     MessageInputComponent,
     TypingIndicatorComponent,
     VoiceSettingsComponent,
-    PluginManagementComponent
+    PluginManagementComponent,
+    KnowledgeBaseManagementComponent,
+    MarkdownPipe
   ],
   imports: [
     BrowserModule,
@@ -59,6 +70,8 @@ import { environment } from '../environments/environment'; // Adjust the import 
     HttpClientModule,
     FormsModule,
     ReactiveFormsModule,
+    AppRoutingModule,
+    ChatbotPluginModule,
     MatSidenavModule,
     MatButtonModule,
     MatIconModule,
@@ -67,16 +80,15 @@ import { environment } from '../environments/environment'; // Adjust the import 
     MatSnackBarModule,
     MatToolbarModule,
     MatSelectModule,
-    MatSlideToggleModule,
     MatDialogModule,
     MatProgressSpinnerModule,
     MatCardModule,
     MatTooltipModule,
     MatChipsModule,
+    MatTableModule,
+    MatSlideToggleModule,
     MatOption,
-    MatSlideToggle,
-    MatProgressSpinner,
-    ChatbotPluginModule
+    MatProgressSpinner
   ],
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
@@ -87,7 +99,7 @@ import { environment } from '../environments/environment'; // Adjust the import 
         enableVoice: true,
         theme: 'floating',
         title: 'AI Assistant'
-      } as PluginConfig
+      }
     }
   ],
   bootstrap: [App]
