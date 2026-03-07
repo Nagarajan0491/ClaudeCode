@@ -22,28 +22,6 @@
         <mat-icon>stop</mat-icon>
       </button>
     </div>
-    <div *ngIf="!isUser && message.sources?.length" class="sources-section">
-      <button class="sources-toggle" (click)="sourcesExpanded = !sourcesExpanded">
-        <mat-icon class="src-icon">auto_stories</mat-icon>
-        <span>{{ message.sources!.length }} source{{ message.sources!.length !== 1 ? 's' : '' }} used</span>
-        <mat-icon class="chevron" [class.rotated]="sourcesExpanded">expand_more</mat-icon>
-      </button>
-      <div class="sources-cards" *ngIf="sourcesExpanded">
-        <div *ngFor="let s of message.sources; let i = index" class="source-card">
-          <div class="source-num">{{ i + 1 }}</div>
-          <div class="source-body">
-            <div class="source-title">{{ s.documentTitle }}</div>
-            <div class="source-meta">
-              <mat-icon class="doc-icon">description</mat-icon>
-              <div class="sim-bar-wrap">
-                <div class="sim-bar" [style.width.%]="s.similarity * 100"></div>
-              </div>
-              <span class="sim-pct">{{ (s.similarity * 100).toFixed(0) }}% match</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
     <span *ngIf="!message.isStreaming" class="timestamp">{{ formattedTime }}</span>
   </div>
 </div>

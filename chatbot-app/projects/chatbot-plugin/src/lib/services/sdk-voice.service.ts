@@ -164,6 +164,8 @@ export class SdkVoiceService implements OnDestroy {
       .replace(/`{1,3}[^`]*`{1,3}/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/[_~>|]/g, '')
+      .replace(/^[\s]*[-*•]\s+/gm, '')
+      .replace(/^[\s]*\d+\.\s+/gm, '')
       .replace(/\s+/g, ' ')
       .trim();
   }

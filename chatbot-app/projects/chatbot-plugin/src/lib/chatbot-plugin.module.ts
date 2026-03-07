@@ -20,6 +20,7 @@ import { SdkConversationService } from './services/sdk-conversation.service';
 import { SdkChatService } from './services/sdk-chat.service';
 import { SdkVoiceService } from './services/sdk-voice.service';
 
+import { SdkMarkdownPipe } from './pipes/sdk-markdown.pipe';
 import { PLUGIN_CONFIG } from './tokens/plugin-config.token';
 import { PluginConfig } from './models/plugin-config.interface';
 
@@ -28,7 +29,8 @@ import { PluginConfig } from './models/plugin-config.interface';
     ChatbotWidgetComponent,
     SdkMessageItemComponent,
     SdkMessageInputComponent,
-    SdkTypingIndicatorComponent
+    SdkTypingIndicatorComponent,
+    SdkMarkdownPipe
   ],
   imports: [
     CommonModule,

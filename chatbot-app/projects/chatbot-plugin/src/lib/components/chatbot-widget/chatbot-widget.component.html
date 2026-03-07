@@ -18,13 +18,10 @@
 </ng-container>
 
 <div class="cp-panel cp-panel--inline" *ngIf="!isFloating">
-  <div class="cp-panel__header">
-    <div class="cp-panel__header-left">
-      <button class="cp-panel__sidebar-toggle" (click)="toggleSidebar()" title="Chat History">
-        <mat-icon>history</mat-icon>
-      </button>
-      <span class="cp-panel__title">{{ title }}</span>
-    </div>
+  <div class="cp-panel__subheader">
+    <button class="cp-panel__sidebar-toggle" (click)="toggleSidebar()" title="Chat History">
+      <mat-icon>history</mat-icon>
+    </button>
   </div>
   <ng-container *ngTemplateOutlet="chatBody"></ng-container>
 </div>

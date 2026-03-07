@@ -164,6 +164,8 @@ export class VoiceService implements OnDestroy {
       .replace(/`{1,3}[^`]*`{1,3}/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/[_~>|]/g, '')
+      .replace(/^[\s]*[-*•]\s+/gm, '')   // strip unordered list bullets
+      .replace(/^[\s]*\d+\.\s+/gm, '')   // strip ordered list numbers
       .replace(/\s+/g, ' ')
       .trim();
   }

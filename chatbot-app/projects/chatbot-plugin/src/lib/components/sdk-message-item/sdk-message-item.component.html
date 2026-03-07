@@ -1,12 +1,23 @@
 <div class="cp-message" [class.cp-message--user]="message.role === 'user'" [class.cp-message--assistant]="message.role === 'assistant'" [class.cp-message--error]="message.isError">
   <div class="cp-message__bubble">
-    <span class="cp-message__content">{{ message.content }}</span>
-    <button *ngIf="message.role === 'assistant' && !message.isStreaming && !message.isError"
-      class="cp-message__speak-btn"
-      (click)="toggleSpeak()"
-      [title]="(voiceService.activeMessageId$ | async) === message.id ? 'Stop' : 'Speak'">
-      <mat-icon>{{ (voiceService.activeMessageId$ | async) === message.id ? 'stop' : 'volume_up' }}</mat-icon>
-    </button>
+    <div class="cp-message__content" [innerHTML]="message.content | sdkMarkdown"></div>
+    <div
+      *ngIf="message.role === 'assistant' && !message.isStreaming && !message.isError && voiceService.ttsSupported"
+      class="cp-message__playback-controls"
+    >
+      <button *ngIf="!isPlaying && !isPaused" (click)="playMessage()" matTooltip="Play" class="cp-message__ctrl-btn">
+        <mat-icon>play_arrow</mat-icon>
+      </button>
+      <button *ngIf="isPlaying" (click)="pauseMessage()" matTooltip="Pause" class="cp-message__ctrl-btn">
+        <mat-icon>pause</mat-icon>
+      </button>
+      <button *ngIf="isPaused" (click)="playMessage()" matTooltip="Resume" class="cp-message__ctrl-btn">
+        <mat-icon>play_arrow</mat-icon>
+      </button>
+      <button *ngIf="isPlaying || isPaused" (click)="stopMessage()" matTooltip="Stop" class="cp-message__ctrl-btn">
+        <mat-icon>stop</mat-icon>
+      </button>
+    </div>
   </div>
   <span class="cp-message__time">{{ message.timestamp | date:'shortTime' }}</span>
 </div>

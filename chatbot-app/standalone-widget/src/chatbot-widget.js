@@ -31,6 +31,8 @@ class ChatbotWidget extends HTMLElement {
     // Speech synthesis (safe — no DOM attributes involved)
     this.synthesis = window.speechSynthesis;
     this.currentUtterance = null;
+    this.speakingMessageId = null;
+    this.isSpeakingPaused = false;
   }
   
   connectedCallback() {
@@ -498,6 +500,50 @@ class ChatbotWidget extends HTMLElement {
         }
       }
 
+      /* Markdown inside bot bubbles */
+      .message-bubble pre {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border-radius: 8px;
+        padding: 12px;
+        overflow-x: auto;
+        margin: 8px 0;
+        font-size: 13px;
+      }
+
+      .message-bubble pre code {
+        background: none;
+        padding: 0;
+        color: inherit;
+      }
+
+      .message-bubble code {
+        background: rgba(0, 0, 0, 0.06);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: 'Consolas', 'Monaco', monospace;
+      }
+
+      .message-bubble h1, .message-bubble h2, .message-bubble h3,
+      .message-bubble h4, .message-bubble h5, .message-bubble h6 {
+        margin: 8px 0 4px;
+        line-height: 1.3;
+      }
+
+      .message-bubble ul, .message-bubble ol {
+        margin: 4px 0;
+        padding-left: 20px;
+      }
+
+      .message-bubble li {
+        margin: 2px 0;
+      }
+
+      .message-bubble p {
+        margin: 4px 0;
+      }
+
       .streaming .cursor {
         display: inline-block;
         animation: blink 1s step-start infinite;
@@ -753,20 +799,38 @@ class ChatbotWidget extends HTMLElement {
         minute: '2-digit'
       });
       
+      const bubbleContent = msg.role === 'bot' ? this.renderMarkdown(msg.content) : this.escapeHtml(msg.content);
+
+      let ttsButtons = '';
+      if (msg.role === 'bot' && this.synthesis && !msg.error && !msg.isStreaming) {
+        if (this.speakingMessageId === msg.id && !this.isSpeakingPaused) {
+          ttsButtons = `
+            <div class="message-actions">
+              <button class="message-action-btn" onclick="this.getRootNode().host.pauseSpeaking()">⏸ Pause</button>
+              <button class="message-action-btn" onclick="this.getRootNode().host.stopSpeaking()">⏹ Stop</button>
+            </div>`;
+        } else if (this.speakingMessageId === msg.id && this.isSpeakingPaused) {
+          ttsButtons = `
+            <div class="message-actions">
+              <button class="message-action-btn" onclick="this.getRootNode().host.resumeSpeaking()">▶ Resume</button>
+              <button class="message-action-btn" onclick="this.getRootNode().host.stopSpeaking()">⏹ Stop</button>
+            </div>`;
+        } else {
+          ttsButtons = `
+            <div class="message-actions">
+              <button class="message-action-btn" onclick="this.getRootNode().host.speakMessage('${msg.id}', this.getRootNode().host.messages.find(m=>m.id==='${msg.id}').content)">🔊 Play</button>
+            </div>`;
+        }
+      }
+
       html += `
         <div class="message ${msg.role}">
           <div class="message-avatar">${msg.role === 'user' ? '🧑' : '🤖'}</div>
           <div class="message-content">
             <div class="message-bubble${msg.isStreaming ? ' streaming' : ''}">
-              ${this.escapeHtml(msg.content)}${msg.isStreaming ? '<span class="cursor">▍</span>' : ''}
+              ${bubbleContent}${msg.isStreaming ? '<span class="cursor">▍</span>' : ''}
             </div>
-            ${msg.role === 'bot' && this.synthesis && !msg.error && !msg.isStreaming ? `
-              <div class="message-actions">
-                <button class="message-action-btn" onclick="this.getRootNode().host.speakMessage('${msg.id}', \`${this.escapeHtml(msg.content)}\`)">
-                  🔊 Play
-                </button>
-              </div>
-            ` : ''}
+            ${ttsButtons}
             <span class="message-time">${time}</span>
           </div>
         </div>
@@ -919,6 +983,9 @@ class ChatbotWidget extends HTMLElement {
         }
       }
 
+      // Strip [SOURCES]:... appended by the backend
+      const sourcesIdx = accumulated.indexOf('[SOURCES]:');
+      if (sourcesIdx !== -1) accumulated = accumulated.slice(0, sourcesIdx).trimEnd();
       this.finalizeBotMessage(botMsgId, accumulated);
     } catch (error) {
       console.error('Chat error:', error);
@@ -968,23 +1035,54 @@ class ChatbotWidget extends HTMLElement {
   
   speakMessage(messageId, text) {
     if (!this.synthesis) return;
-    
+
     if (this.currentUtterance) {
       this.stopSpeaking();
       return;
     }
-    
+
+    this.speakingMessageId = messageId;
+    this.isSpeakingPaused = false;
     this.currentUtterance = new SpeechSynthesisUtterance(this.sanitizeForTts(text));
     this.currentUtterance.onend = () => {
       this.currentUtterance = null;
+      this.speakingMessageId = null;
+      this.isSpeakingPaused = false;
+      this.updateMessagesDisplay();
+    };
+    this.currentUtterance.onerror = () => {
+      this.currentUtterance = null;
+      this.speakingMessageId = null;
+      this.isSpeakingPaused = false;
+      this.updateMessagesDisplay();
     };
     this.synthesis.speak(this.currentUtterance);
+    this.updateMessagesDisplay();
   }
-  
+
+  pauseSpeaking() {
+    if (window.speechSynthesis && this.currentUtterance) {
+      window.speechSynthesis.pause();
+      this.isSpeakingPaused = true;
+      this.updateMessagesDisplay();
+    }
+  }
+
+  resumeSpeaking() {
+    if (window.speechSynthesis && this.isSpeakingPaused) {
+      window.speechSynthesis.resume();
+      this.isSpeakingPaused = false;
+      this.updateMessagesDisplay();
+    }
+  }
+
   stopSpeaking() {
     if (this.synthesis) {
       this.synthesis.cancel();
       this.currentUtterance = null;
+      this.speakingMessageId = null;
+      this.isSpeakingPaused = false;
+      this.updateMessagesDisplay();
     }
   }
   
@@ -1076,14 +1174,24 @@ class ChatbotWidget extends HTMLElement {
 
   sanitizeForTts(text) {
     return text
+      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
       .replace(/#{1,6}\s+/g, '')
       .replace(/\*\*(.+?)\*\*/g, '$1')
       .replace(/\*(.+?)\*/g, '$1')
       .replace(/`{1,3}[^`]*`{1,3}/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/[_~>|]/g, '')
+      .replace(/^[\s]*[-*•]\s+/gm, '')
+      .replace(/^[\s]*\d+\.\s+/gm, '')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  updateMessagesDisplay() {
+    const messagesContainer = this.shadowRoot.getElementById('chatbot-messages');
+    if (messagesContainer) {
+      messagesContainer.innerHTML = this.getMessagesHTML();
+    }
   }
 
   updateMessages() {
@@ -1133,6 +1241,58 @@ class ChatbotWidget extends HTMLElement {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  renderMarkdown(text) {
+    let html = this.escapeHtml(text);
+
+    // Fenced code blocks
+    html = html.replace(/```[\w]*\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic (not inside bold)
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // Headers h1-h6
+    html = html.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, content) => {
+      const level = hashes.length;
+      return `<h${level}>${content}</h${level}>`;
+    });
+
+    // Unordered list items
+    html = html.replace(/((?:^[\t ]*[-*]\s+.+\n?)+)/gm, (block) => {
+      const items = block.trim().split('\n').map(line =>
+        '<li>' + line.replace(/^[\t ]*[-*]\s+/, '') + '</li>'
+      ).join('');
+      return '<ul>' + items + '</ul>';
+    });
+
+    // Ordered list items
+    html = html.replace(/((?:^[\t ]*\d+\.\s+.+\n?)+)/gm, (block) => {
+      const items = block.trim().split('\n').map(line =>
+        '<li>' + line.replace(/^[\t ]*\d+\.\s+/, '') + '</li>'
+      ).join('');
+      return '<ol>' + items + '</ol>';
+    });
+
+    // Double newlines → paragraph breaks
+    html = html.replace(/\n\n+/g, '</p><p>');
+
+    // Single newlines → <br>
+    html = html.replace(/\n/g, '<br>');
+
+    // Wrap in paragraph
+    html = '<p>' + html + '</p>';
+
+    // Clean up empty paragraphs
+    html = html.replace(/<p>\s*<\/p>/g, '');
+
+    return html;
   }
 }
 
