@@ -27,7 +27,7 @@ import { MatProgressSpinner } from '@angular/material/progress-spinner';
 import { AppRoutingModule } from './app-routing.module';
 
 // Plugin SDK
-import { ChatbotPluginModule, PLUGIN_CONFIG } from 'chatbot-plugin';
+import { ChatbotPluginModule } from 'chatbot-plugin';
 
 // Components
 import { App } from './app';
@@ -71,7 +71,12 @@ import { environment } from '../environments/environment';
     FormsModule,
     ReactiveFormsModule,
     AppRoutingModule,
-    ChatbotPluginModule,
+    ChatbotPluginModule.forRoot({
+      apiUrl: environment.apiUrl,
+      enableVoice: true,
+      theme: 'inline',
+      title: 'AI Assistant'
+    }),
     MatSidenavModule,
     MatButtonModule,
     MatIconModule,
@@ -91,16 +96,7 @@ import { environment } from '../environments/environment';
     MatProgressSpinner
   ],
   providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
-    {
-      provide: PLUGIN_CONFIG,
-      useValue: {
-        apiUrl: environment.apiUrl,
-        enableVoice: true,
-        theme: 'floating',
-        title: 'AI Assistant'
-      }
-    }
+    { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true }
   ],
   bootstrap: [App]
 })

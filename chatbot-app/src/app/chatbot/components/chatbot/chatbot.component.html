@@ -1,82 +1,23 @@
-<div class="chatbot-container">
-  <!-- Sidebar -->
-  <div class="sidebar-wrapper" [class.sidebar-open]="sidebarOpen">
-    <app-conversation-list
-      [conversations]="conversations"
-      [selectedId]="selectedConversation?.id ?? null"
-      (conversationSelected)="selectConversation($event)"
-      (conversationDeleted)="deleteConversation($event)"
-      (conversationRenamed)="renameConversation($event)"
-      (newConversation)="createConversation()"
-    ></app-conversation-list>
+<div class="shell">
+  <div class="shell-toolbar">
+    <div class="toolbar-brand">
+      <mat-icon class="brand-icon">smart_toy</mat-icon>
+      <span class="brand-title">AI Assistant</span>
+    </div>
+    <div class="toolbar-actions">
+      <button mat-icon-button (click)="openKnowledgeBase()" matTooltip="Knowledge Base">
+        <mat-icon>menu_book</mat-icon>
+      </button>
+      <button mat-icon-button (click)="openPluginManagement()" matTooltip="Manage Plugins">
+        <mat-icon>extension</mat-icon>
+      </button>
+      <button mat-icon-button (click)="goToAdmin()" matTooltip="Admin">
+        <mat-icon>admin_panel_settings</mat-icon>
+      </button>
+    </div>
   </div>
 
-  <!-- Main chat area -->
-  <div class="chat-area">
-    <!-- Header -->
-    <div class="chat-header">
-      <button mat-icon-button class="toggle-sidebar-btn" (click)="toggleSidebar()" matTooltip="Toggle sidebar">
-        <mat-icon>menu</mat-icon>
-      </button>
-      <div class="header-title">
-        <mat-icon class="header-icon">chat</mat-icon>
-        <h1 class="chat-title">
-          {{ selectedConversation?.title || 'AI Assistant' }}
-        </h1>
-      </div>
-      <div class="header-actions">
-        <button mat-icon-button (click)="openKnowledgeBase()" matTooltip="Knowledge Base">
-          <mat-icon>menu_book</mat-icon>
-        </button>
-<button mat-icon-button (click)="toggleVoicePanel()" matTooltip="Voice Settings" [class.panel-active]="voicePanelOpen">
-          <mat-icon>settings_voice</mat-icon>
-        </button>
-      </div>
-
-      <!-- Voice settings panel -->
-      <div *ngIf="voicePanelOpen" class="voice-panel-overlay" (click)="closeVoicePanel()"></div>
-      <div *ngIf="voicePanelOpen" class="voice-panel">
-        <app-voice-settings></app-voice-settings>
-      </div>
-    </div>
-
-    <!-- Messages -->
-    <div class="messages-container" *ngIf="selectedConversation; else noConversation">
-      <div class="messages-scroll">
-        <div *ngIf="messages.length === 0" class="welcome-message">
-          <div class="welcome-icon">🤖</div>
-          <h2>Hello! How can I help you today?</h2>
-          <p>Type a message below to start chatting.</p>
-        </div>
-
-        <app-message-item
-          *ngFor="let message of messages"
-          [message]="message"
-        ></app-message-item>
-
-        <app-typing-indicator [isVisible]="isLoading"></app-typing-indicator>
-
-        <div #messagesEnd></div>
-      </div>
-    </div>
-
-    <ng-template #noConversation>
-      <div class="no-conversation">
-        <div class="no-conv-content">
-          <div class="no-conv-icon">💬</div>
-          <h2>No conversation selected</h2>
-          <p>Select an existing conversation or create a new one to begin.</p>
-          <button (click)="createConversation()" class="start-btn">Start New Chat</button>
-        </div>
-      </div>
-    </ng-template>
-
-    <!-- Input -->
-    <div *ngIf="selectedConversation" class="input-wrapper">
-      <app-message-input
-        [isLoading]="isLoading"
-        (messageSent)="sendMessage($event)"
-      ></app-message-input>
-    </div>
+  <div class="shell-body">
+    <chatbot-widget theme="inline"></chatbot-widget>
   </div>
 </div>
