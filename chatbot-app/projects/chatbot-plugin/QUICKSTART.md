@@ -46,6 +46,45 @@ npm install /path/to/chatbot-plugin-0.1.0.tgz
 
 ---
 
+## Step 2.5: Add tsconfig.json Paths Mapping (REQUIRED)
+
+**This step is mandatory** for Angular 17+ apps that use the esbuild/Vite application builder
+(`@angular/build:application`). Without it, Vite's dependency pre-bundler will inline
+`@angular/core` into the plugin bundle, creating a duplicate Angular runtime that causes
+`NG0203: inject() called outside injection context`.
+
+In your host app's **`tsconfig.json`**, add a `paths` entry that points directly to the plugin's
+dist directory:
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "chatbot-plugin": ["<relative-path-to>/dist/chatbot-plugin"]
+    }
+  }
+}
+```
+
+**Example** (if your host app is a sibling of `chatbot-app`):
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "chatbot-plugin": ["../chatbot-app/dist/chatbot-plugin"]
+    }
+  }
+}
+```
+
+This tells Angular's build system to resolve `chatbot-plugin` imports directly through its own
+esbuild/Angular compiler pipeline instead of through Vite's dep optimizer.
+
+---
+
 ## Step 3: Configure Your Application
 
 ### 3.1 Install Peer Dependencies (if not already installed)
@@ -74,28 +113,24 @@ In your `index.html` (inside `<head>`):
 
 ## Step 4: Configure Module
 
-### Option A: Standalone Component (Angular 14+)
+### Option A: Standalone Component (Angular 17+)
 
 ```typescript
-// app.config.ts or main.ts
+// app.config.ts
 import { ApplicationConfig, importProvidersFrom } from '@angular/core';
 import { provideAnimations } from '@angular/platform-browser/animations';
-import { provideHttpClient } from '@angular/common/http';
-import { ChatbotPluginModule, PLUGIN_CONFIG } from 'chatbot-plugin';
+import { ChatbotPluginModule } from 'chatbot-plugin';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideAnimations(),
-    provideHttpClient(),
-    importProvidersFrom(ChatbotPluginModule),
-    {
-      provide: PLUGIN_CONFIG,
-      useValue: {
-        apiUrl: 'http://localhost:8000/api/chat',
+    importProvidersFrom(
+      ChatbotPluginModule.forRoot({
+        apiUrl: 'http://localhost:5112',
         enableVoice: true,
         title: 'AI Assistant'
-      }
-    }
+      })
+    )
   ]
 };
 ```
@@ -107,8 +142,7 @@ export const appConfig: ApplicationConfig = {
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { HttpClientModule } from '@angular/common/http';
-import { ChatbotPluginModule, PLUGIN_CONFIG } from 'chatbot-plugin';
+import { ChatbotPluginModule } from 'chatbot-plugin';
 
 import { AppComponent } from './app.component';
 
@@ -117,18 +151,11 @@ import { AppComponent } from './app.component';
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
-    HttpClientModule,
-    ChatbotPluginModule
-  ],
-  providers: [
-    {
-      provide: PLUGIN_CONFIG,
-      useValue: {
-        apiUrl: 'http://localhost:8000/api/chat',
-        enableVoice: true,
-        title: 'Support Bot'
-      }
-    }
+    ChatbotPluginModule.forRoot({
+      apiUrl: 'http://localhost:5112',
+      enableVoice: true,
+      title: 'Support Bot'
+    })
   ],
   bootstrap: [AppComponent]
 })
@@ -191,6 +218,19 @@ Visit `http://localhost:4200` and you should see:
 ---
 
 ## Troubleshooting
+
+### NG0203: `_HighContrastModeDetector` inject() failed
+
+This means Vite's dep pre-bundler has inlined `@angular/core` into the plugin bundle, creating
+two separate Angular runtimes. Fix it by adding the `tsconfig.json` `paths` entry from Step 2.5:
+
+```json
+"paths": {
+  "chatbot-plugin": ["<path-to>/dist/chatbot-plugin"]
+}
+```
+
+If the path is already set and the error persists, delete `.angular/cache` and restart `ng serve`.
 
 ### "Cannot find module 'chatbot-plugin'"
 

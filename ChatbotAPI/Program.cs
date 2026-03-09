@@ -60,7 +60,7 @@ if (providerName.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
     if (string.IsNullOrWhiteSpace(apiKey))
         throw new InvalidOperationException("Gemini:ApiKey must be configured when AIProvider:Provider = Gemini");
 
-    var model = builder.Configuration.GetValue<string>("AIProvider:DefaultModel", "gemini-2.5-flash")!;
+    var model = builder.Configuration.GetValue<string>("AIProvider:DefaultModel", "gemini-2.5-flash-lite")!;
     builder.Services.AddGoogleAIGeminiChatCompletion(model, apiKey);
     builder.Services.AddScoped<IAIProvider, GeminiService>();
 }
@@ -77,6 +77,7 @@ builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IPluginService, PluginService>();
+builder.Services.AddScoped<IHostAppActionService, HostAppActionService>();
 builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
 builder.Services.AddScoped<IRAGService, RAGService>();
@@ -108,6 +109,28 @@ using (var scope = app.Services.CreateScope())
         // EF Core 8 cannot map Vector natively — add the column outside EF Core's model
         db.Database.ExecuteSqlRaw(
             "ALTER TABLE \"DocumentChunks\" ADD COLUMN IF NOT EXISTS \"Embedding\" vector(768)");
+        db.Database.ExecuteSqlRaw(@"
+            CREATE TABLE IF NOT EXISTS ""HostAppActions"" (
+                ""Id""               SERIAL PRIMARY KEY,
+                ""Name""             VARCHAR(100) NOT NULL,
+                ""Description""      VARCHAR(500),
+                ""EndpointUrl""      VARCHAR(2000) NOT NULL,
+                ""HttpMethod""       VARCHAR(10) NOT NULL DEFAULT 'GET',
+                ""ParameterSchema""  TEXT NOT NULL DEFAULT '{{}}',
+                ""ResponseSchema""   TEXT,
+                ""AuthType""         VARCHAR(20),
+                ""AuthToken""        TEXT,
+                ""AuthHeaderName""   VARCHAR(100),
+                ""HostAppId""        VARCHAR(100),
+                ""FewShotExamples""  TEXT,
+                ""IsActive""         BOOLEAN NOT NULL DEFAULT TRUE,
+                ""RegisteredAt""     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                ""LastInvokedAt""    TIMESTAMPTZ,
+                ""InvocationCount""  INTEGER NOT NULL DEFAULT 0
+            )");
+        db.Database.ExecuteSqlRaw(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_HostAppActions_Name_HostAppId""
+            ON ""HostAppActions"" (""Name"", ""HostAppId"")");
         Log.Information("Database schema verified/created successfully");
     }
     catch (Exception ex)

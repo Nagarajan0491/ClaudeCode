@@ -18,6 +18,7 @@ import { PluginConfig } from '../../models/plugin-config.interface';
 export class ChatbotWidgetComponent implements OnInit, OnDestroy {
   @Input() context: Record<string, string> = {};
   @Input() theme: 'floating' | 'inline' = 'floating';
+  @Input() hostAppId: string = '';
   @ViewChild('messagesContainer') messagesContainer?: ElementRef<HTMLElement>;
 
   messages: SdkMessage[] = [];
@@ -130,7 +131,8 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
           content,
           inputMethod,
           hostContext: Object.keys(this.context).length > 0 ? this.context : undefined,
-          hostActions: descriptors.length > 0 ? descriptors : undefined
+          hostActions: descriptors.length > 0 ? descriptors : undefined,
+          hostAppId: this.hostAppId || undefined
         };
 
         let accumulated = '';
@@ -145,7 +147,9 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
             this.cdr.detectChanges();
           },
           complete: () => {
-            this.handleStreamComplete(placeholderId, accumulated);
+            const sourcesIdx = accumulated.indexOf('[SOURCES]:');
+            if (sourcesIdx !== -1) accumulated = accumulated.slice(0, sourcesIdx).trimEnd();
+            this.handleStreamComplete(placeholderId, accumulated, inputMethod === 'voice');
           }
         });
         this.subs.add(streamSub);
@@ -165,7 +169,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
     });
   }
 
-  private handleStreamComplete(placeholderId: number, text: string): void {
+  private handleStreamComplete(placeholderId: number, text: string, autoSpeak: boolean): void {
     const trimmed = text.trim();
     if (/^\s*\{"action_call"/.test(trimmed)) {
       try {
@@ -176,9 +180,9 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
           this.updateMessage(placeholderId, `[Executing ${name}...]`, true);
           Promise.resolve(action.execute(parameters)).then(result => {
             const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
-            this.feedbackToAI(placeholderId, `Action result for ${name}: ${resultStr}`);
+            this.feedbackToAI(placeholderId, `Action result for ${name}: ${resultStr}`, autoSpeak);
           }).catch((err: Error) => {
-            this.feedbackToAI(placeholderId, `Action ${name} failed: ${err.message}`);
+            this.feedbackToAI(placeholderId, `Action ${name} failed: ${err.message}`, autoSpeak);
           });
           return;
         }
@@ -186,14 +190,14 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
     }
     this.updateMessage(placeholderId, text, false);
     this.isLoading = false;
-    if (this.config.enableVoice) {
+    if (this.config.enableVoice && autoSpeak) {
       const msg = this.messages.find(m => m.id === placeholderId);
       if (msg) this.voiceService.speakMessage(msg.id, text);
     }
     this.cdr.detectChanges();
   }
 
-  private feedbackToAI(placeholderId: number, feedback: string): void {
+  private feedbackToAI(placeholderId: number, feedback: string, autoSpeak: boolean): void {
     this.updateMessage(placeholderId, '', true);
     const sub = this.conversationService.ensureConversation().subscribe(conversationId => {
       const descriptors = this.actionRegistry.getActionDescriptors();
@@ -202,7 +206,8 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
         content: feedback,
         inputMethod: 'text',
         hostContext: Object.keys(this.context).length > 0 ? this.context : undefined,
-        hostActions: descriptors.length > 0 ? descriptors : undefined
+        hostActions: descriptors.length > 0 ? descriptors : undefined,
+        hostAppId: this.hostAppId || undefined
       };
       let accumulated = '';
       const streamSub = this.sdkChat.streamSdkMessage(request).subscribe({
@@ -218,7 +223,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
         complete: () => {
           this.updateMessage(placeholderId, accumulated, false);
           this.isLoading = false;
-          if (this.config.enableVoice) {
+          if (this.config.enableVoice && autoSpeak) {
             const msg = this.messages.find(m => m.id === placeholderId);
             if (msg) this.voiceService.speakMessage(msg.id, accumulated);
           }

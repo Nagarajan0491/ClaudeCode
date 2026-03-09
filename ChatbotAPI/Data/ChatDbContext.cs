@@ -14,6 +14,7 @@ public class ChatDbContext : DbContext
     public DbSet<RegisteredAction> RegisteredActions => Set<RegisteredAction>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentChunk> DocumentChunks => Set<DocumentChunk>();
+    public DbSet<HostAppAction> HostAppActions => Set<HostAppAction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -72,6 +73,22 @@ public class ChatDbContext : DbContext
                 .WithMany(d => d.Chunks)
                 .HasForeignKey(e => e.DocumentId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HostAppAction>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.EndpointUrl).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.HttpMethod).HasMaxLength(10).HasDefaultValue("GET");
+            entity.Property(e => e.ParameterSchema).HasDefaultValue("{}");
+            entity.Property(e => e.AuthType).HasMaxLength(20);
+            entity.Property(e => e.AuthHeaderName).HasMaxLength(100);
+            entity.Property(e => e.HostAppId).HasMaxLength(100);
+            entity.HasIndex(e => new { e.Name, e.HostAppId })
+                .IsUnique()
+                .HasDatabaseName("IX_HostAppActions_Name_HostAppId");
         });
     }
 }

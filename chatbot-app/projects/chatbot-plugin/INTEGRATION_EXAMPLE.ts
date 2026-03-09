@@ -12,17 +12,9 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { HttpClientModule } from '@angular/common/http';
-import { ChatbotPluginModule, PLUGIN_CONFIG, PluginConfig } from 'chatbot-plugin';
+import { ChatbotPluginModule } from 'chatbot-plugin';
 
 import { AppComponent } from './app.component';
-
-// Configure the chatbot
-const chatbotConfig: PluginConfig = {
-  apiUrl: 'http://localhost:8000/api/chat', // Your backend API
-  enableVoice: true,                         // Enable voice features
-  title: 'AI Assistant'                      // Widget title
-};
 
 @NgModule({
   declarations: [
@@ -31,14 +23,11 @@ const chatbotConfig: PluginConfig = {
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
-    HttpClientModule,
-    ChatbotPluginModule  // Import the chatbot plugin
-  ],
-  providers: [
-    {
-      provide: PLUGIN_CONFIG,
-      useValue: chatbotConfig
-    }
+    ChatbotPluginModule.forRoot({   // forRoot() is required — provides all plugin services
+      apiUrl: 'http://localhost:5112',
+      enableVoice: true,
+      title: 'AI Assistant'
+    })
   ],
   bootstrap: [AppComponent]
 })

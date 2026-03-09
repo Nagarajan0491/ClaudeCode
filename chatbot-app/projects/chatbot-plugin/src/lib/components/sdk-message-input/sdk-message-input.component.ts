@@ -55,8 +55,10 @@ export class SdkMessageInputComponent implements OnInit, OnDestroy {
   toggleVoice(): void {
     if (this.voiceService.isListening$.value) {
       this.voiceService.stopListening();
-      this.inputMethod = 'text';
+      // inputMethod stays 'voice' — send() will reset it after emitting
     } else {
+      this.voiceService.transcript$.next('');
+      this.content = '';
       this.inputMethod = 'voice';
       this.voiceService.startListening();
     }

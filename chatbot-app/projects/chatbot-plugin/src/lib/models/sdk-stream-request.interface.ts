@@ -6,4 +6,5 @@ export interface SdkStreamRequest {
   inputMethod: string;
   hostContext?: Record<string, string>;
   hostActions?: HostActionDescriptor[];
+  hostAppId?: string;
 }

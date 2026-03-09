@@ -15,4 +15,5 @@ public class SdkStreamRequest
 
     public Dictionary<string, string>? HostContext { get; set; }
     public List<HostActionDescriptor>? HostActions { get; set; }
+    public string? HostAppId { get; set; }
 }

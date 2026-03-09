@@ -14,6 +14,7 @@ public class ChatService : IChatService
     private readonly IConversationRepository _conversationRepository;
     private readonly IMessageRepository _messageRepository;
     private readonly IPluginService _pluginService;
+    private readonly IHostAppActionService _hostAppActionService;
     private readonly IRAGService _ragService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ChatService> _logger;
@@ -23,6 +24,7 @@ public class ChatService : IChatService
         IConversationRepository conversationRepository,
         IMessageRepository messageRepository,
         IPluginService pluginService,
+        IHostAppActionService hostAppActionService,
         IRAGService ragService,
         IConfiguration configuration,
         ILogger<ChatService> logger)
@@ -31,6 +33,7 @@ public class ChatService : IChatService
         _conversationRepository = conversationRepository;
         _messageRepository = messageRepository;
         _pluginService = pluginService;
+        _hostAppActionService = hostAppActionService;
         _ragService = ragService;
         _configuration = configuration;
         _logger = logger;
@@ -58,9 +61,10 @@ public class ChatService : IChatService
         // RAG: retrieve context before building system prompt
         var ragResult = await _ragService.RetrieveContextAsync(request.Content, cancellationToken);
 
-        // Build system prompt with plugin awareness and RAG context
+        // Build system prompt with plugin awareness, host actions and RAG context
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var systemPrompt = BuildSystemPrompt(activePlugins, request.HostContext, request.HostActions, ragResult.ContextBlock);
+        var activeHostActions = (await _hostAppActionService.GetActiveActionsAsync(null, cancellationToken)).ToList();
+        var systemPrompt = BuildSystemPrompt(activePlugins, activeHostActions, request.HostContext, request.HostActions, ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var messages = new List<ChatMessage> { new("system", systemPrompt) };
@@ -84,6 +88,18 @@ public class ChatService : IChatService
                 ? $"Plugin result: {pluginResult.Output}"
                 : $"Plugin call failed: {pluginResult.Error}. Please respond helpfully."));
             aiResponse = await _aiProvider.GenerateResponseAsync(messages, model, cancellationToken);
+        }
+        else
+        {
+            var hostResult = await _hostAppActionService.TryAutoInvokeAsync(aiResponse, null, cancellationToken);
+            if (hostResult != null)
+            {
+                messages.Add(new ChatMessage("assistant", aiResponse));
+                messages.Add(new ChatMessage("user", hostResult.Success
+                    ? $"Host action result: {hostResult.Output}"
+                    : $"Host action '{hostResult.ActionName}' failed: {hostResult.Error}. Respond helpfully."));
+                aiResponse = await _aiProvider.GenerateResponseAsync(messages, model, cancellationToken);
+            }
         }
 
         // Save assistant message
@@ -157,7 +173,8 @@ public class ChatService : IChatService
         var ragResult = await _ragService.RetrieveContextAsync(message, cancellationToken);
 
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var systemPrompt = BuildSystemPrompt(activePlugins, ragContextBlock: ragResult.ContextBlock);
+        var activeHostActions = (await _hostAppActionService.GetActiveActionsAsync(null, cancellationToken)).ToList();
+        var systemPrompt = BuildSystemPrompt(activePlugins, activeHostActions, ragContextBlock: ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var chatMessages = new List<ChatMessage> { new("system", systemPrompt) };
@@ -242,7 +259,8 @@ public class ChatService : IChatService
         var ragResult = await _ragService.RetrieveContextAsync(request.Content, cancellationToken);
 
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var systemPrompt = BuildSystemPrompt(activePlugins, request.HostContext, request.HostActions, ragResult.ContextBlock);
+        var activeHostActions = (await _hostAppActionService.GetActiveActionsAsync(request.HostAppId, cancellationToken)).ToList();
+        var systemPrompt = BuildSystemPrompt(activePlugins, activeHostActions, request.HostContext, request.HostActions, ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
         var chatMessages = new List<ChatMessage> { new("system", systemPrompt) };
@@ -254,14 +272,38 @@ public class ChatService : IChatService
 
         _logger.LogInformation("SDK streaming message to model {Model} for conversation {ConversationId}", model, request.ConversationId);
 
-        var fullResponse = new StringBuilder();
+        // Buffer first response to intercept host_action_call before streaming to client
+        var firstResponse = new StringBuilder();
         await foreach (var chunk in _aiProvider.StreamResponseAsync(chatMessages, model, cancellationToken))
+            firstResponse.Append(chunk);
+
+        var firstContent = firstResponse.ToString();
+        string assistantContent;
+
+        var hostResult = await _hostAppActionService.TryAutoInvokeAsync(firstContent, request.HostAppId, cancellationToken);
+        if (hostResult != null)
         {
-            fullResponse.Append(chunk);
-            yield return chunk;
+            // Don't yield the raw host_action_call JSON — feed result back and stream second response
+            chatMessages.Add(new ChatMessage("assistant", firstContent));
+            chatMessages.Add(new ChatMessage("user", hostResult.Success
+                ? $"Host action result: {hostResult.Output}"
+                : $"Host action '{hostResult.ActionName}' failed: {hostResult.Error}. Respond helpfully."));
+
+            var secondResponse = new StringBuilder();
+            await foreach (var chunk in _aiProvider.StreamResponseAsync(chatMessages, model, cancellationToken))
+            {
+                secondResponse.Append(chunk);
+                yield return chunk;
+            }
+            assistantContent = secondResponse.ToString();
+        }
+        else
+        {
+            // No host_action_call — yield buffered content
+            yield return firstContent;
+            assistantContent = firstContent;
         }
 
-        var assistantContent = fullResponse.ToString();
         var assistantMessage = new Message
         {
             ConversationId = request.ConversationId,
@@ -303,6 +345,7 @@ public class ChatService : IChatService
 
     private static string BuildSystemPrompt(
         List<PluginRegistration> activePlugins,
+        List<HostAppAction>? activeHostActions = null,
         Dictionary<string, string>? hostContext = null,
         List<HostActionDescriptor>? hostActions = null,
         string? ragContextBlock = null)
@@ -334,6 +377,23 @@ public class ChatService : IChatService
             sb.AppendLine("\nIf a host action is needed, respond ONLY with this JSON (no other text):");
             sb.Append("{\"action_call\": {\"name\": \"<name>\", \"parameters\": {<params>}}}");
             sb.AppendLine("\nOtherwise respond normally.");
+        }
+
+        if (activeHostActions is { Count: > 0 })
+        {
+            sb.AppendLine("\n\nYou have access to the following host application APIs (called server-side):");
+            foreach (var a in activeHostActions)
+            {
+                sb.AppendLine($"- {a.Name}: {a.Description}");
+                sb.AppendLine($"  Parameters schema: {a.ParameterSchema}");
+                if (!string.IsNullOrWhiteSpace(a.ResponseSchema))
+                    sb.AppendLine($"  Response schema: {a.ResponseSchema}");
+                if (!string.IsNullOrWhiteSpace(a.FewShotExamples))
+                    sb.AppendLine($"  Examples: {a.FewShotExamples}");
+            }
+            sb.AppendLine("\nIf a host API call is needed, respond ONLY with this JSON (no other text):");
+            sb.AppendLine("{\"host_action_call\": {\"name\": \"<name>\", \"parameters\": {<params>}}}");
+            sb.Append("If required parameters are missing, ask the user first. Otherwise respond normally.");
         }
 
         if (activePlugins.Count > 0)

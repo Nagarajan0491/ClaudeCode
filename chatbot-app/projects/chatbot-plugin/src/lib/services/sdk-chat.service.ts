@@ -40,6 +40,7 @@ export class SdkChatService {
               if (typeof parsed === 'string' && parsed.startsWith('[STREAM_ERROR]:')) {
                 observer.error(new Error(parsed.slice(15))); return;
               }
+              if (typeof parsed === 'string' && parsed.startsWith('[SOURCES]:')) { continue; }
               observer.next(parsed as string);
             } catch { observer.next(raw); }
           }

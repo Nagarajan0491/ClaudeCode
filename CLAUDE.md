@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Enterprise AI chatbot system. Angular 21 frontend talks to a .NET 8 Web API backend that supports
 two swappable AI providers (Ollama local LLM or Google Gemini), and persists conversations in
 PostgreSQL. The chatbot is also embeddable as a plugin in other Angular apps via the
-`chatbot-plugin` Angular library.
+`chatbot-plugin` Angular library. RAG (Retrieval-Augmented Generation) is supported via pgvector
+and the Gemini Embedding API.
 
 ```
 ChatbotSystem/
@@ -24,10 +25,14 @@ PostgreSQL must be running before the app works end-to-end. Ollama is only requi
 Ollama provider.
 
 ```bash
-# PostgreSQL (Docker)
+# PostgreSQL (Docker) — note: local install uses port 5433
 docker run -d --name chatbot-postgres \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=Chatbot \
-  -p 5432:5432 postgres:16
+  -p 5433:5432 postgres:16
+
+# Enable pgvector extension (required for RAG)
+# Program.cs handles this automatically on startup:
+#   CREATE EXTENSION IF NOT EXISTS vector
 
 # Ollama (only required when AIProvider:Provider = Ollama)
 ollama serve          # keep running in background
@@ -76,13 +81,19 @@ as a PostCSS plugin, which breaks the build. Tailwind v4 requires `@tailwindcss/
 
 ## Backend Architecture
 
-**Request flow:** `Controller → IChatService → IAIProvider (OllamaService | GeminiService) + IMessageRepository`
+**Request flow:** `Controller → IChatService → IRAGService (context retrieval) → IAIProvider (OllamaService | GeminiService) + IMessageRepository`
 
 ### Program.cs
 
-DI wiring, middleware pipeline, CORS (origins read from `Cors:AllowedOrigins` in config),
-`EnsureCreated()` on startup. Provider selection happens at startup time — the active provider is
-compiled into the DI container.
+DI wiring, middleware pipeline, CORS (origins read from `Cors:AllowedOrigins` in config).
+
+**pgvector setup (on startup):**
+1. `NpgsqlDataSourceBuilder` with `.UseVector()` is used instead of plain `UseNpgsql()` — required for Npgsql to handle the `Vector` type.
+2. `CREATE EXTENSION IF NOT EXISTS vector` executed via raw SQL.
+3. `EnsureCreated()` creates all tables.
+4. `ALTER TABLE "DocumentChunks" ADD COLUMN IF NOT EXISTS "Embedding" vector(768)` adds the vector column outside EF Core's model (EF Core 8 limitation — no native pgvector mapping).
+
+Provider selection happens at startup time — the active provider is compiled into the DI container.
 
 Reads `GEMINI_API_KEY` environment variable and injects it into `IConfiguration["Gemini:ApiKey"]`
 before validation, so the rest of the app reads the key from config only.
@@ -92,13 +103,28 @@ before validation, so the rest of the app reads the key from config only.
 - `Services/Interfaces/IAIProvider.cs` — interface with `GenerateResponseAsync` and
   `StreamResponseAsync`. `ChatMessage` record (Role, Content) is also defined here.
 - `Services/ChatService.cs` — `SendMessageAsync`, `StreamMessageAsync`, and `StreamSdkMessageAsync`.
-  `BuildSystemPrompt(activePlugins, hostContext?, hostActions?)` injects host context key/value pairs
-  and host action descriptions into the system prompt when provided. Existing callers pass `null` —
-  backward-compatible. Auto-titles the conversation from the first message content (first 50 chars).
+  Calls `IRAGService.RetrieveContextAsync(userMessage)` before building the system prompt; the
+  retrieved context is prepended to the system prompt when non-empty.
+  `BuildSystemPrompt(ragContext, activePlugins, hostContext?, hostActions?)` injects RAG context,
+  host context key/value pairs, and host action descriptions into the system prompt.
+  Auto-titles the conversation from the first message content (first 50 chars).
 - `Services/OllamaService.cs` — HTTP client to Ollama at `http://localhost:11434`. Calls
   `/api/chat` for both regular and streaming requests. Timeout: 5 minutes.
 - `Services/GeminiService.cs` — Uses Semantic Kernel `IChatCompletionService` registered via
   `AddGoogleAIGeminiChatCompletion`. Converts `ChatMessage` list to Semantic Kernel `ChatHistory`.
+- `Services/EmbeddingService.cs` — Calls the Gemini Embedding REST API
+  (`generativelanguage.googleapis.com/{version}/models/{model}:embedContent`) with `outputDimensionality = 768`.
+  Requires `GEMINI_API_KEY`. Model configured via `Gemini:EmbeddingModel` (default `text-embedding-005`),
+  API version via `Gemini:EmbeddingApiVersion` (default `v1`; `appsettings.json` uses `v1beta` for
+  `gemini-embedding-001`). Throws `EmbeddingException` on failure.
+- `Services/KnowledgeBaseService.cs` — Document ingestion (chunking + embedding), list, delete,
+  and cosine-similarity vector search. Chunks are inserted and searched via raw ADO.NET (not EF Core)
+  because EF Core 8 cannot map the `Vector` type natively.
+  Config keys: `RAG:ChunkSize` (default 500 words), `RAG:ChunkOverlap` (default 50 words).
+- `Services/RAGService.cs` — Thin orchestrator: calls `KnowledgeBaseService.SearchAsync`, filters
+  by `RAG:SimilarityThreshold`, and formats results into a `--- Knowledge Base Context ---` block
+  appended to the system prompt. Returns `RAGResult(contextString, sources[])`. Failures are caught
+  and logged as warnings — the chat continues without context rather than failing.
 
 ### Phase 3 — Server-Side Plugin Service
 
@@ -108,6 +134,16 @@ before validation, so the rest of the app reads the key from config only.
   parses `plugin_call` JSON emitted by the AI, looks up the matching active plugin by name, and
   executes it automatically.
 - `Controllers/PluginsController.cs` — REST API for managing and executing registered plugins.
+
+### Phase 5 — Knowledge Base / RAG
+
+- `Controllers/KnowledgeBaseController.cs` — REST API at `/api/knowledge-base`.
+  Accepts `.txt`, `.md`, `.pdf`, `.pptx` uploads (PDF via PdfPig; PPTX via DocumentFormat.OpenXml).
+- `DTOs/KnowledgeBaseDtos.cs` — `DocumentDto`, `ChunkSearchResult`, `SearchRequest`, `SourceReference`.
+- `Data/Models/Document.cs` — document metadata.
+- `Data/Models/DocumentChunk.cs` — chunked text with `float[] Embedding` (EF Core ignores it;
+  column managed via raw SQL).
+- `Exceptions/EmbeddingException.cs` — thrown when embedding generation fails.
 
 ### Middleware
 
@@ -123,24 +159,27 @@ before validation, so the rest of the app reads the key from config only.
 | `GeminiConnectionException` (other) | 503 Service Unavailable |
 | `ConversationNotFoundException` | 404 Not Found |
 | `InvalidMessageException` | 400 Bad Request |
+| `EmbeddingException` | 502 Bad Gateway |
 | Unhandled | 500 Internal Server Error |
 
 ### Database
 
 EF Core with PostgreSQL. Schema is created with `EnsureCreated()` at startup — no migration runner
-needed for day-to-day development.
+needed for day-to-day development. The `vector` extension and the `DocumentChunks.Embedding`
+column are added via raw SQL in `Program.cs` after `EnsureCreated()`.
 
 **Active tables:**
 - `Conversations` — id, title, createdAt, updatedAt
 - `Messages` — id, conversationId (cascade delete), role ("user"/"assistant"), content,
   inputMethod ("text"/"voice"), timestamp
-
-**Phase 3 tables (server-side plugins — active):**
 - `PluginRegistrations` — fully managed by `PluginService.cs` (full CRUD + auto-invoke via
   `TryAutoInvokeAsync`)
+- `Documents` — id, title, fileName, fileType, uploadedAt, totalChunks, isActive
+- `DocumentChunks` — id, documentId (cascade delete), content, chunkIndex, tokenCount, createdAt,
+  `Embedding vector(768)` (added via raw SQL, not EF Core)
 
-**Phase 5 stub tables (reserved for RAG):**
-- `DataSources`, `RegisteredActions` — schema exists, not yet used by any service logic.
+**Stub tables (schema exists, no service logic):**
+- `DataSources`, `RegisteredActions`
 
 ---
 
@@ -153,7 +192,7 @@ Set `AIProvider:Provider` in `appsettings.json` (or an environment variable):
 ```json
 "AIProvider": {
   "Provider": "Gemini",       // "Gemini" or "Ollama"
-  "DefaultModel": "gemini-2.5-flash",
+  "DefaultModel": "gemini-2.5-flash-lite",
   "HistoryLimit": 10
 }
 ```
@@ -166,6 +205,7 @@ The provider is selected once at application startup. Changing it requires a res
 - `OllamaService` calls `POST /api/chat` with `{ model, messages, stream }`.
 - Configure base URL: `Ollama:BaseUrl` (default `http://localhost:11434`).
 - Common models: `phi3:mini`, `llama3`, `mistral`.
+- **Note:** RAG embedding requires a Gemini API key regardless of which chat provider is selected.
 
 ### Gemini (Google AI)
 
@@ -174,6 +214,7 @@ The provider is selected once at application startup. Changing it requires a res
 - **API key is read from the `GEMINI_API_KEY` environment variable** (injected into IConfiguration
   at startup in `Program.cs`). The `Gemini:ApiKey` entry in `appsettings.json` is intentionally
   blank — do not put the live key there.
+- The same key is used for both chat (GeminiService) and embeddings (EmbeddingService).
 - If neither the env var nor config provides the key, startup throws
   `InvalidOperationException: Gemini:ApiKey must be configured…`.
 
@@ -202,23 +243,33 @@ dotnet run
 {
   "AIProvider": {
     "Provider": "Gemini",
-    "DefaultModel": "gemini-2.5-flash",
+    "DefaultModel": "gemini-2.5-flash-lite",
     "HistoryLimit": 10
   },
   "Ollama": {
     "BaseUrl": "http://localhost:11434"
   },
   "Gemini": {
-    "ApiKey": ""
+    "ApiKey": "",
+    "EmbeddingModel": "gemini-embedding-001",
+    "EmbeddingApiVersion": "v1beta"
+  },
+  "RAG": {
+    "Enabled": true,
+    "ChunkSize": 500,
+    "ChunkOverlap": 50,
+    "TopK": 3,
+    "SimilarityThreshold": 0.0
   },
   "Cors": {
     "AllowedOrigins": [
       "http://localhost:4200",
-      "http://localhost:4300"
+      "http://localhost:4300",
+      "http://localhost:61182"
     ]
   },
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=Chatbot;Username=postgres;Password=postgres"
+    "DefaultConnection": "Host=localhost;Port=5433;Database=Chatbot;Username=postgres;Password=postgres"
   },
   "Serilog": {
     "MinimumLevel": {
@@ -229,9 +280,13 @@ dotnet run
 }
 ```
 
+**Note:** PostgreSQL is on port **5433** (not the default 5432) in the local dev setup.
+
 ---
 
 ## API Contract
+
+### Chat & Conversations
 
 | Method | Path | Body / Params | Response |
 |--------|------|---------------|----------|
@@ -243,6 +298,11 @@ dotnet run
 | GET | `/api/chat/stream/{id}` | `?message=` | SSE stream (`text/event-stream`) |
 | POST | `/api/chat/stream-sdk` | `SdkStreamRequest` (JSON body) | SSE stream (`text/event-stream`) |
 | GET | `/api/health` | — | `{status, ollamaReachable, timestamp}` |
+
+### Plugins
+
+| Method | Path | Body / Params | Response |
+|--------|------|---------------|----------|
 | GET | `/api/plugins` | — | `PluginDto[]` |
 | GET | `/api/plugins/{id}` | — | `PluginDto` |
 | POST | `/api/plugins` | `CreatePluginRequest` | `PluginDto` (201) |
@@ -250,6 +310,17 @@ dotnet run
 | DELETE | `/api/plugins/{id}` | — | 204 No Content |
 | PATCH | `/api/plugins/{id}/toggle` | — | `PluginDto` (toggles `IsActive`) |
 | POST | `/api/plugins/{id}/execute` | `{parameters}` | `PluginExecuteResult` |
+
+### Knowledge Base (RAG)
+
+| Method | Path | Body / Params | Response |
+|--------|------|---------------|----------|
+| POST | `/api/knowledge-base/upload` | `multipart/form-data` (file, title?) | `DocumentDto` (201) |
+| GET | `/api/knowledge-base/documents` | — | `DocumentDto[]` ordered by `UploadedAt` desc |
+| DELETE | `/api/knowledge-base/documents/{id}` | — | 204 No Content |
+| POST | `/api/knowledge-base/search` | `{query, topK?}` | `ChunkSearchResult[]` |
+
+**Supported upload formats:** `.txt`, `.md`, `.pdf`, `.pptx`
 
 **`SendMessageRequest` constraints:** `content` 1–10 000 chars; `inputMethod` max 20 chars.
 Optional SDK fields (always null from the main chatbot-app): `hostContext: Dictionary<string,string>`,
@@ -279,9 +350,17 @@ The `chatbot-plugin` uses `fetch()` + `ReadableStream` (not `EventSource`) to pa
   detection. Always call `this.cdr.detectChanges()` explicitly after any async operation that
   updates component state. Failing to do so means the template will not re-render.
 - `app.html` is the default Angular scaffold placeholder — it is **not used**. `app.ts` uses
-  `template: '<app-chatbot></app-chatbot>'`.
+  `template: '<router-outlet></router-outlet>'` (routing enabled).
 - `src/environments/environment.ts` — `apiUrl: 'http://localhost:5112'` (dev);
   `environment.prod.ts` uses `apiUrl: '/api'`.
+
+### Routing
+
+| Path | Component |
+|------|-----------|
+| `/` | `ChatbotComponent` |
+| `/admin` | `AdminPageComponent` |
+| `**` | redirects to `/` |
 
 ### Components
 
@@ -293,6 +372,9 @@ The `chatbot-plugin` uses `fetch()` + `ReadableStream` (not `EventSource`) to pa
 | `MessageInputComponent` | `app-message-input` | Textarea, send, STT mic toggle, char counter |
 | `TypingIndicatorComponent` | `app-typing-indicator` | Animated "..." while waiting for response |
 | `VoiceSettingsComponent` | `app-voice-settings` | Auto-play toggle, voice selector, speed/pitch sliders |
+| `PluginManagementComponent` | `app-plugin-management` | MatDialog (620px); manage registered plugins |
+| `KnowledgeBaseManagementComponent` | `app-knowledge-base-management` | MatDialog (600px); document upload/delete for RAG |
+| `AdminPageComponent` | `app-admin-page` | Full-page admin at `/admin`; document upload table + navigation back to chat |
 
 ### Services
 
@@ -302,13 +384,27 @@ The `chatbot-plugin` uses `fetch()` + `ReadableStream` (not `EventSource`) to pa
   (EventSource SSE). `sendMessage()` passes `inputMethod` to the backend so voice vs text is
   recorded.
 - `chatbot/services/voice.service.ts` — STT and TTS wrapper (see Voice section below).
+- `chatbot/services/plugin.service.ts` — GET/POST/DELETE for plugin CRUD; `providedIn: 'root'`.
+- `chatbot/services/knowledge-base.service.ts` — `loadDocuments()`, `uploadDocument(file, title?)`,
+  `deleteDocument(id)`. `uploadDocument` posts `multipart/form-data` to `/api/knowledge-base/upload`.
 - `interceptors/error.interceptor.ts` — catches `status === 0` (network unreachable) and shows a
   `MatSnackBar` toast.
+
+### Models
+
+- `chatbot/models/conversation.interface.ts`
+- `chatbot/models/message.interface.ts`
+- `chatbot/models/plugin.interface.ts` — `Plugin` + `PluginExecuteResult`
+- `chatbot/models/document.interface.ts` — `Document` (mirrors `DocumentDto`)
+
+### Pipes
+
+- `chatbot/pipes/markdown.pipe.ts` — `MarkdownPipe` transforms markdown text to HTML for display.
 
 ### Data flow
 
 `ChatbotComponent` (container) → `ConversationService` (BehaviorSubject state) + `ChatService`
-(HTTP/SSE) → backend API
+(HTTP/SSE) → backend API (which prepends RAG context to the system prompt internally)
 
 ---
 
@@ -350,9 +446,10 @@ are required. Both STT and TTS availability are feature-detected at runtime.
 
 - Auto-play slide toggle.
 - Voice dropdown (all voices available in the browser).
-- "Tamil Voice" button — calls `autoSelectTamilVoice()` which finds the first voice with
-  `lang.startsWith('ta')` and sets rate 0.9, pitch 0.85.
 - Speed and pitch range sliders (0.5–2, step 0.05).
+
+**Note:** There is no "Tamil Voice" button in `VoiceSettingsComponent`. `autoSelectTamilVoice()`
+exists in `VoiceService` but is used only internally by `restoreOrAutoSelect()`.
 
 ---
 
@@ -497,7 +594,7 @@ including React and Vue examples.
 - **Phase 2 — DONE** — Voice input/output via Web Speech API; Gemini as a second AI provider; `inputMethod` tracked per message.
 - **Phase 3 — DONE** — Server-side plugins: full CRUD via `PluginsController` + `PluginService`; `TryAutoInvokeAsync` in `ChatService` detects `plugin_call` JSON and calls registered plugin HTTP endpoints.
 - **Phase 4 — DONE** — Chatbot Plugin SDK (`chatbot-plugin` Angular library) + Standalone Web Component (`standalone-widget`); `POST /api/chat/stream-sdk`; host context + host action callbacks; floating/inline widget.
-- **Phase 5 (next) — RAG**: add `pgvector` extension + `dotnet ef migrations add AddVectorSearch`; `EmbeddingService` + `RAGService` with Ollama `nomic-embed-text` model; Semantic Kernel function calling integrates into `ChatService`.
+- **Phase 5 — DONE** — RAG: `pgvector` extension; `EmbeddingService` (Gemini Embedding API, 768-dim); `KnowledgeBaseService` (document ingestion + chunking + cosine search via raw ADO.NET); `RAGService` (context retrieval + prompt injection); `KnowledgeBaseController` (`/api/knowledge-base`, supports .txt/.md/.pdf/.pptx); `KnowledgeBaseManagementComponent` (dialog); `AdminPageComponent` (route `/admin`).
 
 ---
 
