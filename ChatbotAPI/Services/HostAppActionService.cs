@@ -233,7 +233,14 @@ public class HostAppActionService : IHostAppActionService
 
         try
         {
-            using var doc = JsonDocument.Parse(text[start..]);
+            int depth = 0, end = -1;
+            for (int i = start; i < text.Length; i++)
+            {
+                if (text[i] == '{') depth++;
+                else if (text[i] == '}' && --depth == 0) { end = i; break; }
+            }
+            if (end < 0) return null;
+            using var doc = JsonDocument.Parse(text[start..(end + 1)]);
             if (!doc.RootElement.TryGetProperty("host_action_call", out var callEl)) return null;
             if (!callEl.TryGetProperty("name", out var nameEl)) return null;
             var actionName = nameEl.GetString();
