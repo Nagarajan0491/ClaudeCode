@@ -63,7 +63,7 @@ public class ChatService : IChatService
 
         // Build system prompt with plugin awareness, host actions and RAG context
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var activeHostActions = (await _hostAppActionService.GetActiveActionsAsync(null, cancellationToken)).ToList();
+        var activeHostActions = new List<HostAppAction>();
         var systemPrompt = BuildSystemPrompt(activePlugins, activeHostActions, request.HostContext, request.HostActions, ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
@@ -173,7 +173,7 @@ public class ChatService : IChatService
         var ragResult = await _ragService.RetrieveContextAsync(message, cancellationToken);
 
         var activePlugins = (await _pluginService.GetActivePluginsAsync(cancellationToken)).ToList();
-        var activeHostActions = (await _hostAppActionService.GetActiveActionsAsync(null, cancellationToken)).ToList();
+        var activeHostActions = new List<HostAppAction>();
         var systemPrompt = BuildSystemPrompt(activePlugins, activeHostActions, ragContextBlock: ragResult.ContextBlock);
 
         var historyLimit = _configuration.GetValue<int>("AIProvider:HistoryLimit", 10);
@@ -295,13 +295,37 @@ public class ChatService : IChatService
                 secondResponse.Append(chunk);
                 yield return chunk;
             }
-            assistantContent = secondResponse.ToString();
+            if (secondResponse.Length == 0)
+                yield return "I processed your request but couldn't generate a response. Please try again.";
+            assistantContent = secondResponse.Length > 0 ? secondResponse.ToString()
+                : "I processed your request but couldn't generate a response. Please try again.";
         }
         else
         {
-            // No host_action_call — yield buffered content
-            yield return firstContent;
-            assistantContent = firstContent;
+            // Check if AI tried a host_action_call that wasn't matched (no registered action found)
+            if (firstContent.Contains("\"host_action_call\""))
+            {
+                chatMessages.Add(new ChatMessage("assistant", firstContent));
+                chatMessages.Add(new ChatMessage("user",
+                    "The requested host action is not available. Please answer the user's question " +
+                    "directly using your general knowledge instead."));
+                var recoveryResponse = new StringBuilder();
+                await foreach (var chunk in _aiProvider.StreamResponseAsync(chatMessages, model, cancellationToken))
+                {
+                    recoveryResponse.Append(chunk);
+                    yield return chunk;
+                }
+                if (recoveryResponse.Length == 0)
+                    yield return "I'm sorry, I couldn't retrieve that information right now. Please try again.";
+                assistantContent = recoveryResponse.Length > 0 ? recoveryResponse.ToString()
+                    : "I'm sorry, I couldn't retrieve that information right now. Please try again.";
+            }
+            else
+            {
+                // Normal response — yield buffered content
+                yield return firstContent;
+                assistantContent = firstContent;
+            }
         }
 
         var assistantMessage = new Message

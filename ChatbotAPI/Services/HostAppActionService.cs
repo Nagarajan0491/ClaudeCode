@@ -180,10 +180,13 @@ public class HostAppActionService : IHostAppActionService
             await _db.SaveChangesAsync(ct);
 
             var body = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("Host action '{Name}' returned HTTP {Status}: {Body}", action.Name, (int)response.StatusCode, body);
             return new HostAppActionExecuteResult
             {
                 Success = response.IsSuccessStatusCode,
                 Output = body,
+                Error = response.IsSuccessStatusCode ? null : $"HTTP {(int)response.StatusCode}: {body}",
                 StatusCode = (int)response.StatusCode,
                 ActionName = action.Name
             };

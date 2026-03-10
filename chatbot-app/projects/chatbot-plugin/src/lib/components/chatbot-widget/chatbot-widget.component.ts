@@ -149,6 +149,9 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
           complete: () => {
             const sourcesIdx = accumulated.indexOf('[SOURCES]:');
             if (sourcesIdx !== -1) accumulated = accumulated.slice(0, sourcesIdx).trimEnd();
+            if (!accumulated.trim()) {
+              accumulated = "I couldn't generate a response. Please try again.";
+            }
             this.handleStreamComplete(placeholderId, accumulated, inputMethod === 'voice');
           }
         });
