@@ -28,6 +28,10 @@ public class ChatDbContext : DbContext
             entity.Property(e => e.Title).HasMaxLength(255).IsRequired();
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
+            entity.Property(e => e.HostAppId).HasMaxLength(100);
+            entity.Property(e => e.UserId).HasMaxLength(255);
+            entity.HasIndex(e => new { e.HostAppId, e.UserId })
+                .HasDatabaseName("IX_Conversations_HostAppId_UserId");
         });
 
         modelBuilder.Entity<Message>(entity =>

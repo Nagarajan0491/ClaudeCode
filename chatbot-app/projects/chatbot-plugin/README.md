@@ -145,9 +145,11 @@ export class MyComponent implements OnInit {
 
 ```typescript
 interface PluginConfig {
-  apiUrl: string;           // Backend chat API endpoint
-  enableVoice?: boolean;    // Enable speech features (default: true)
-  title?: string;           // Widget title (default: 'Chat')
+  apiUrl: string;             // Backend chat API endpoint
+  enableVoice?: boolean;      // Enable speech features (default: true)
+  enableHistory?: boolean;    // Enable conversation history (default: false)
+  title?: string;             // Widget title (default: 'Chat')
+  theme?: 'floating' | 'inline'; // Widget display mode 
 }
 ```
 
@@ -159,6 +161,10 @@ interface PluginConfig {
 |-------|------|---------|-------------|
 | `isFloating` | `boolean` | `true` | Floating button or inline widget |
 | `title` | `string` | `'Chat'` | Widget header title |
+| `userId` | `string` | `''` | User ID (auto-enables history when provided) |
+| `enableHistory` | `boolean` | Auto* | Enable conversation history |
+
+*Auto: Automatically enabled when `userId` is provided (user is logged in)
 
 ## Styling
 

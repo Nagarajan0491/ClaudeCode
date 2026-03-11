@@ -106,6 +106,10 @@ using (var scope = app.Services.CreateScope())
     {
         db.Database.ExecuteSqlRaw("CREATE EXTENSION IF NOT EXISTS vector");
         db.Database.EnsureCreated();
+        db.Database.ExecuteSqlRaw(
+            "ALTER TABLE \"Conversations\" ADD COLUMN IF NOT EXISTS \"HostAppId\" varchar(100) NULL");
+        db.Database.ExecuteSqlRaw(
+            "ALTER TABLE \"Conversations\" ADD COLUMN IF NOT EXISTS \"UserId\" varchar(255) NULL");
         // EF Core 8 cannot map Vector natively — add the column outside EF Core's model
         db.Database.ExecuteSqlRaw(
             "ALTER TABLE \"DocumentChunks\" ADD COLUMN IF NOT EXISTS \"Embedding\" vector(768)");

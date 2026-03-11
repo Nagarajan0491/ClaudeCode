@@ -19,6 +19,8 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
   @Input() context: Record<string, string> = {};
   @Input() theme: 'floating' | 'inline' = 'floating';
   @Input() hostAppId: string = '';
+  @Input() userId: string = '';
+  @Input() enableHistory: boolean | null = null;
   @ViewChild('messagesContainer') messagesContainer?: ElementRef<HTMLElement>;
 
   messages: SdkMessage[] = [];
@@ -44,7 +46,17 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    if (!this.isFloating) this.isOpen = true;
+    // Auto-enable history when userId is provided, unless host explicitly set enableHistory=false
+    if (this.enableHistory !== false && this.userId) {
+      this.enableHistory = true;
+    } else if (this.enableHistory === null) {
+      this.enableHistory = false;
+    }
+
+    if (!this.isFloating) {
+      this.isOpen = true;
+      if (this.userId) this.loadConversations();
+    }
   }
 
   ngOnDestroy(): void { this.subs.unsubscribe(); }
@@ -56,7 +68,8 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
   }
 
   loadConversations(): void {
-    const sub = this.conversationService.listConversations().subscribe({
+    if (!this.userId) { this.conversations = []; this.cdr.detectChanges(); return; }
+    const sub = this.conversationService.listConversations(this.hostAppId || undefined, this.userId).subscribe({
       next: (list) => { this.conversations = list; this.cdr.detectChanges(); },
       error: () => { /* silent */ }
     });
@@ -95,6 +108,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
 
   toggleOpen(): void {
     this.isOpen = !this.isOpen;
+    if (this.isOpen && this.userId) this.loadConversations();
     this.cdr.detectChanges();
   }
 
@@ -123,7 +137,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
       isStreaming: true
     });
 
-    this.conversationService.ensureConversation().subscribe({
+    this.conversationService.ensureConversation(this.hostAppId || undefined, this.userId || undefined).subscribe({
       next: (conversationId) => {
         const descriptors = this.actionRegistry.getActionDescriptors();
         const request = {
@@ -132,14 +146,16 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
           inputMethod,
           hostContext: Object.keys(this.context).length > 0 ? this.context : undefined,
           hostActions: descriptors.length > 0 ? descriptors : undefined,
-          hostAppId: this.hostAppId || undefined
+          hostAppId: this.hostAppId || undefined,
+          userId: this.userId || undefined
         };
 
         let accumulated = '';
         const streamSub = this.sdkChat.streamSdkMessage(request).subscribe({
           next: (chunk) => {
             accumulated += chunk;
-            this.updateMessage(placeholderId, accumulated, true);
+            const displayText = accumulated.replace(/\[TITLE\]:[^\[]*$/, '').trimEnd();
+            this.updateMessage(placeholderId, displayText || accumulated, true);
           },
           error: (err: Error) => {
             this.updateMessage(placeholderId, `An error occurred. Please try again.`, false, true);
@@ -147,6 +163,16 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
             this.cdr.detectChanges();
           },
           complete: () => {
+            // Extract and strip [TITLE]: sentinel
+            const titleIdx = accumulated.indexOf('[TITLE]:');
+            if (titleIdx !== -1) {
+              const afterTitle = accumulated.slice(titleIdx + 8);
+              const nextSentinel = afterTitle.search(/\[SOURCES\]:|$/);
+              const extractedTitle = afterTitle.slice(0, nextSentinel).trim();
+              if (extractedTitle && conversationId !== null) this.updateSidebarTitle(conversationId, extractedTitle);
+              accumulated = accumulated.slice(0, titleIdx).trimEnd();
+            }
+            // Strip [SOURCES]: sentinel
             const sourcesIdx = accumulated.indexOf('[SOURCES]:');
             if (sourcesIdx !== -1) accumulated = accumulated.slice(0, sourcesIdx).trimEnd();
             if (!accumulated.trim()) {
@@ -202,7 +228,7 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
 
   private feedbackToAI(placeholderId: number, feedback: string, autoSpeak: boolean): void {
     this.updateMessage(placeholderId, '', true);
-    const sub = this.conversationService.ensureConversation().subscribe(conversationId => {
+    const sub = this.conversationService.ensureConversation(this.hostAppId || undefined, this.userId || undefined).subscribe(conversationId => {
       const descriptors = this.actionRegistry.getActionDescriptors();
       const request = {
         conversationId,
@@ -210,7 +236,8 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
         inputMethod: 'text',
         hostContext: Object.keys(this.context).length > 0 ? this.context : undefined,
         hostActions: descriptors.length > 0 ? descriptors : undefined,
-        hostAppId: this.hostAppId || undefined
+        hostAppId: this.hostAppId || undefined,
+        userId: this.userId || undefined
       };
       let accumulated = '';
       const streamSub = this.sdkChat.streamSdkMessage(request).subscribe({
@@ -224,7 +251,18 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         },
         complete: () => {
-          this.updateMessage(placeholderId, accumulated, false);
+          const titleIdx = accumulated.indexOf('[TITLE]:');
+          if (titleIdx !== -1) {
+            const afterTitle = accumulated.slice(titleIdx + 8);
+            const nextSentinel = afterTitle.search(/\[SOURCES\]:|$/);
+            const extractedTitle = afterTitle.slice(0, nextSentinel).trim();
+            const cid = this.conversationService.getConversationId();
+            if (extractedTitle && cid) this.updateSidebarTitle(cid, extractedTitle);
+            accumulated = accumulated.slice(0, titleIdx).trimEnd();
+          }
+          const sourcesIdx = accumulated.indexOf('[SOURCES]:');
+          if (sourcesIdx !== -1) accumulated = accumulated.slice(0, sourcesIdx).trimEnd();
+          this.updateMessage(placeholderId, accumulated || "I couldn't generate a response. Please try again.", false);
           this.isLoading = false;
           if (this.config.enableVoice && autoSpeak) {
             const msg = this.messages.find(m => m.id === placeholderId);
@@ -250,6 +288,24 @@ export class ChatbotWidgetComponent implements OnInit, OnDestroy {
     );
     this.cdr.detectChanges();
     this.scrollToBottom();
+  }
+
+  private updateSidebarTitle(conversationId: number, title: string): void {
+    const idx = this.conversations.findIndex(c => c.id === conversationId);
+    if (idx !== -1) {
+      this.conversations = [
+        ...this.conversations.slice(0, idx),
+        { ...this.conversations[idx], title },
+        ...this.conversations.slice(idx + 1)
+      ];
+    } else {
+      // New conversation not yet in the sidebar list — prepend it
+      this.conversations = [
+        { id: conversationId, title, updatedAt: new Date().toISOString() },
+        ...this.conversations
+      ];
+    }
+    this.cdr.detectChanges();
   }
 
   private scrollToBottom(): void {

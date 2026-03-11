@@ -26,6 +26,7 @@ import { AppComponent } from './app.component';
     ChatbotPluginModule.forRoot({   // forRoot() is required — provides all plugin services
       apiUrl: 'http://localhost:5112',
       enableVoice: true,
+      enableHistory: true,  // Enable conversation history for logged-in users
       title: 'AI Assistant'
     })
   ],

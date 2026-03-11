@@ -74,6 +74,7 @@ import { environment } from '../environments/environment';
     ChatbotPluginModule.forRoot({
       apiUrl: environment.apiUrl,
       enableVoice: true,
+      enableHistory: true,
       theme: 'inline',
       title: 'AI Assistant'
     }),

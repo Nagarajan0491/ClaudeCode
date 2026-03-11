@@ -164,6 +164,11 @@ declare namespace JSX {
 | `title` | string | `'AI Assistant'` | Widget header title |
 | `floating` | boolean | `true` | Show as floating button or inline |
 | `enable-voice` | boolean | `true` | Enable voice features |
+| `enable-history` | boolean | Auto* | Enable conversation history |
+| `user-id` | string | `''` | User ID (auto-enables history) |
+| `host-app-id` | string | `''` | Host application identifier |
+
+*Auto: Automatically enabled when `user-id` is provided (user is logged in)
 
 ### Examples
 
@@ -172,6 +177,15 @@ declare namespace JSX {
 <chatbot-widget 
   api-url="https://api.example.com/chat"
   title="Customer Support">
+</chatbot-widget>
+```
+
+**With User Login & History**
+```html
+<chatbot-widget 
+  api-url="https://api.example.com/chat"
+  user-id="user123"
+  title="AI Assistant">
 </chatbot-widget>
 ```
 

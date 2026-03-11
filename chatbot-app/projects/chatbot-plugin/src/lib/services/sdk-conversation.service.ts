@@ -14,10 +14,12 @@ export class SdkConversationService {
     @Inject(PLUGIN_CONFIG) private config: PluginConfig
   ) {}
 
-  ensureConversation(): Observable<number> {
+  ensureConversation(hostAppId?: string, userId?: string): Observable<number | null> {
+    if (!userId) return of(null);   // guest mode — no DB conversation
     if (this.conversationId !== null) return of(this.conversationId);
     return this.http
-      .post<{ id: number }>(`${this.config.apiUrl}/api/conversations`, {})
+      .post<{ id: number }>(`${this.config.apiUrl}/api/conversations`,
+        { hostAppId: hostAppId || null, userId })
       .pipe(
         tap(c => { this.conversationId = c.id; }),
         map(c => c.id)
@@ -32,9 +34,12 @@ export class SdkConversationService {
     this.conversationId = id;
   }
 
-  listConversations(): Observable<Array<{ id: number; title: string; updatedAt: string }>> {
+  listConversations(hostAppId?: string, userId?: string): Observable<Array<{ id: number; title: string; updatedAt: string }>> {
+    const params: Record<string, string> = {};
+    if (hostAppId) params['hostAppId'] = hostAppId;
+    if (userId) params['userId'] = userId;
     return this.http.get<Array<{ id: number; title: string; updatedAt: string }>>(
-      `${this.config.apiUrl}/api/conversations`
+      `${this.config.apiUrl}/api/conversations`, { params }
     );
   }
 

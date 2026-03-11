@@ -6,7 +6,7 @@
   <div class="cp-panel cp-panel--floating" *ngIf="isOpen">
     <div class="cp-panel__header">
       <div class="cp-panel__header-left">
-        <button class="cp-panel__sidebar-toggle" (click)="toggleSidebar()" title="Chat History">
+        <button class="cp-panel__sidebar-toggle" *ngIf="enableHistory" (click)="toggleSidebar()" title="Chat History">
           <mat-icon>history</mat-icon>
         </button>
         <span class="cp-panel__title">{{ title }}</span>
@@ -19,7 +19,7 @@
 
 <div class="cp-panel cp-panel--inline" *ngIf="!isFloating">
   <div class="cp-panel__subheader">
-    <button class="cp-panel__sidebar-toggle" (click)="toggleSidebar()" title="Chat History">
+    <button class="cp-panel__sidebar-toggle" *ngIf="enableHistory" (click)="toggleSidebar()" title="Chat History">
       <mat-icon>history</mat-icon>
     </button>
   </div>
@@ -28,7 +28,7 @@
 
 <ng-template #chatBody>
   <div class="cp-body">
-    <div class="cp-sidebar" *ngIf="isSidebarOpen">
+    <div class="cp-sidebar" *ngIf="isSidebarOpen && enableHistory">
       <div class="cp-sidebar__header">History</div>
       <button class="cp-sidebar__new-btn" (click)="startNewChat()">+ New Chat</button>
       <div class="cp-sidebar__list">

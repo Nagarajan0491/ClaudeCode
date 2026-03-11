@@ -26,7 +26,11 @@ class ChatbotWidget extends HTMLElement {
     this.widgetTitle = 'AI Assistant';
     this.floating = true;
     this.enableVoice = true;
+    this.enableHistory = false;
+    this.userId = '';
     this.recognition = null;
+    this.hostAppId = '';
+    this.hostContext = {};
 
     // Speech synthesis (safe — no DOM attributes involved)
     this.synthesis = window.speechSynthesis;
@@ -43,6 +47,23 @@ class ChatbotWidget extends HTMLElement {
     this.widgetTitle = this.getAttribute('title') || 'AI Assistant';
     this.floating = this.getAttribute('floating') !== 'false';
     this.enableVoice = this.getAttribute('enable-voice') !== 'false';
+    this.userId = this.getAttribute('user-id') || '';
+    this.hostAppId = this.getAttribute('host-app-id') || '';
+    try {
+      this.hostContext = JSON.parse(this.getAttribute('host-context') || '{}');
+    } catch {
+      this.hostContext = {};
+    }
+
+    // Auto-enable history when user is logged in (userId provided)
+    // User can still explicitly set enable-history="false" to disable even when logged in
+    if (this.getAttribute('enable-history') === 'false') {
+      this.enableHistory = false;
+    } else if (this.userId) {
+      this.enableHistory = true;
+    } else {
+      this.enableHistory = this.getAttribute('enable-history') === 'true';
+    }
 
     // Speech recognition setup (depends on enableVoice — must come after)
     this.recognition = null;
@@ -948,7 +969,13 @@ class ChatbotWidget extends HTMLElement {
       const response = await fetch(this.streamEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId, content, inputMethod })
+        body: JSON.stringify({
+          conversationId,
+          content,
+          inputMethod,
+          ...(this.hostAppId && { hostAppId: this.hostAppId }),
+          ...(this.hostContext && Object.keys(this.hostContext).length > 0 && { hostContext: this.hostContext })
+        })
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1293,6 +1320,14 @@ class ChatbotWidget extends HTMLElement {
     html = html.replace(/<p>\s*<\/p>/g, '');
 
     return html;
+  }
+
+  registerServerAction(request) {
+    return fetch(`${this.apiBaseUrl}/api/host-actions/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request)
+    });
   }
 }
 

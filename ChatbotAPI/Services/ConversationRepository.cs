@@ -16,9 +16,13 @@ public class ConversationRepository : IConversationRepository
         _logger = logger;
     }
 
-    public async Task<IEnumerable<Conversation>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Conversation>> GetAllAsync(
+        string? hostAppId = null, string? userId = null,
+        CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(userId)) return Enumerable.Empty<Conversation>();
         return await _context.Conversations
+            .Where(c => c.HostAppId == hostAppId && c.UserId == userId)
             .Include(c => c.Messages)
             .OrderByDescending(c => c.UpdatedAt)
             .ToListAsync(cancellationToken);
@@ -31,13 +35,17 @@ public class ConversationRepository : IConversationRepository
             .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
     }
 
-    public async Task<Conversation> CreateAsync(CancellationToken cancellationToken = default)
+    public async Task<Conversation> CreateAsync(
+        string? hostAppId = null, string? userId = null,
+        CancellationToken cancellationToken = default)
     {
         var conversation = new Conversation
         {
             Title = "New Conversation",
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            HostAppId = hostAppId,
+            UserId = userId
         };
 
         _context.Conversations.Add(conversation);

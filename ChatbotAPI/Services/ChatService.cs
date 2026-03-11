@@ -113,29 +113,14 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(assistantMessage, cancellationToken);
 
-        // Auto-title on first message using AI
-        if (!conversation.Messages.Any())
+        string? generatedTitle = null;
+        if (ShouldGenerateTitle(conversation.Messages.Count))
         {
-            try
-            {
-                var titleMessages = new List<ChatMessage>
-                {
-                    new("system", "Generate a concise, descriptive title of 3 to 7 words for a chat conversation based on the user message and AI response provided. Return only the title text with no quotes and no trailing punctuation."),
-                    new("user", $"User: {request.Content}\n\nAssistant: {aiResponse}")
-                };
-                var generatedTitle = await _aiProvider.GenerateResponseAsync(titleMessages, model, cancellationToken);
-                generatedTitle = generatedTitle.Trim().Trim('"').TrimEnd('.').Trim();
-                var finalTitle = !string.IsNullOrWhiteSpace(generatedTitle)
-                    ? (generatedTitle.Length > 100 ? generatedTitle[..100] : generatedTitle)
-                    : (request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content);
-                await _conversationRepository.UpdateTitleAsync(request.ConversationId, finalTitle, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to generate AI title for conversation {Id}, falling back to truncation", request.ConversationId);
-                var title = request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content;
-                await _conversationRepository.UpdateTitleAsync(request.ConversationId, title, cancellationToken);
-            }
+            var ctx = BuildTitleContext(conversation, request.Content, aiResponse);
+            generatedTitle = await GenerateTitleAsync(model, ctx, cancellationToken);
+            var finalTitle = generatedTitle
+                ?? (request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content);
+            await _conversationRepository.UpdateTitleAsync(request.ConversationId, finalTitle, cancellationToken);
         }
 
         return new ChatResponse
@@ -145,7 +130,8 @@ public class ChatService : IChatService
             Content = aiResponse,
             Role = "assistant",
             Timestamp = assistantMessage.Timestamp,
-            Sources = ragResult.Sources.Count > 0 ? ragResult.Sources.ToList() : null
+            Sources = ragResult.Sources.Count > 0 ? ragResult.Sources.ToList() : null,
+            GeneratedTitle = generatedTitle
         };
     }
 
@@ -205,29 +191,15 @@ public class ChatService : IChatService
         };
         await _messageRepository.AddAsync(assistantMessage, cancellationToken);
 
-        // Auto-title on first message
-        if (!conversation.Messages.Any())
+        if (ShouldGenerateTitle(conversation.Messages.Count))
         {
-            try
-            {
-                var titleMessages = new List<ChatMessage>
-                {
-                    new("system", "Generate a concise, descriptive title of 3 to 7 words for a chat conversation based on the user message and AI response provided. Return only the title text with no quotes and no trailing punctuation."),
-                    new("user", $"User: {message}\n\nAssistant: {assistantContent}")
-                };
-                var generatedTitle = await _aiProvider.GenerateResponseAsync(titleMessages, model, cancellationToken);
-                generatedTitle = generatedTitle.Trim().Trim('"').TrimEnd('.').Trim();
-                var finalTitle = !string.IsNullOrWhiteSpace(generatedTitle)
-                    ? (generatedTitle.Length > 100 ? generatedTitle[..100] : generatedTitle)
-                    : (message.Length > 50 ? message[..50] + "..." : message);
-                await _conversationRepository.UpdateTitleAsync(conversationId, finalTitle, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to generate AI title for conversation {Id}, falling back to truncation", conversationId);
-                var title = message.Length > 50 ? message[..50] + "..." : message;
-                await _conversationRepository.UpdateTitleAsync(conversationId, title, cancellationToken);
-            }
+            var ctx = BuildTitleContext(conversation, message, assistantContent);
+            var generatedTitle = await GenerateTitleAsync(model, ctx, cancellationToken);
+            var finalTitle = generatedTitle
+                ?? (message.Length > 50 ? message[..50] + "..." : message);
+            await _conversationRepository.UpdateTitleAsync(conversationId, finalTitle, cancellationToken);
+            if (generatedTitle != null)
+                yield return $"[TITLE]:{generatedTitle}";
         }
 
         // Emit sources sentinel for frontend to pick up
@@ -242,18 +214,32 @@ public class ChatService : IChatService
         if (string.IsNullOrWhiteSpace(request.Content))
             throw new InvalidMessageException("Message content cannot be empty.");
 
-        var conversation = await _conversationRepository.GetByIdAsync(request.ConversationId, cancellationToken)
-            ?? throw new ConversationNotFoundException(request.ConversationId);
+        bool shouldPersist = !string.IsNullOrEmpty(request.UserId) && request.ConversationId.HasValue;
+
+        Conversation conversation;
+        int messageCountBeforeTurn;
+        if (request.ConversationId.HasValue)
+        {
+            conversation = await _conversationRepository.GetByIdAsync(request.ConversationId.Value, cancellationToken)
+                ?? throw new ConversationNotFoundException(request.ConversationId.Value);
+            messageCountBeforeTurn = conversation.Messages.Count;
+        }
+        else
+        {
+            // Guest mode: ephemeral conversation, no DB persistence
+            conversation = new Conversation { Messages = new List<Message>() };
+            messageCountBeforeTurn = 0;
+        }
 
         var userMessage = new Message
         {
-            ConversationId = request.ConversationId,
+            ConversationId = request.ConversationId ?? 0,
             Role = "user",
             Content = request.Content,
             InputMethod = request.InputMethod,
             Timestamp = DateTime.UtcNow
         };
-        await _messageRepository.AddAsync(userMessage, cancellationToken);
+        if (shouldPersist) await _messageRepository.AddAsync(userMessage, cancellationToken);
 
         // RAG: retrieve context before streaming
         var ragResult = await _ragService.RetrieveContextAsync(request.Content, cancellationToken);
@@ -330,41 +316,93 @@ public class ChatService : IChatService
 
         var assistantMessage = new Message
         {
-            ConversationId = request.ConversationId,
+            ConversationId = request.ConversationId ?? 0,
             Role = "assistant",
             Content = assistantContent,
             InputMethod = "text",
             Timestamp = DateTime.UtcNow
         };
-        await _messageRepository.AddAsync(assistantMessage, cancellationToken);
+        if (shouldPersist) await _messageRepository.AddAsync(assistantMessage, cancellationToken);
 
-        if (!conversation.Messages.Any())
+        string? titleToEmit = null;
+        bool isFeedbackTurn = request.Content.StartsWith("Host action result:", StringComparison.OrdinalIgnoreCase)
+                           || request.Content.StartsWith("Plugin result:", StringComparison.OrdinalIgnoreCase)
+                           || request.Content.StartsWith("Action result for ", StringComparison.OrdinalIgnoreCase);
+
+        if (shouldPersist && ShouldGenerateTitle(messageCountBeforeTurn) && !isFeedbackTurn)
         {
-            try
-            {
-                var titleMessages = new List<ChatMessage>
-                {
-                    new("system", "Generate a concise, descriptive title of 3 to 7 words for a chat conversation based on the user message and AI response provided. Return only the title text with no quotes and no trailing punctuation."),
-                    new("user", $"User: {request.Content}\n\nAssistant: {assistantContent}")
-                };
-                var generatedTitle = await _aiProvider.GenerateResponseAsync(titleMessages, model, cancellationToken);
-                generatedTitle = generatedTitle.Trim().Trim('"').TrimEnd('.').Trim();
-                var finalTitle = !string.IsNullOrWhiteSpace(generatedTitle)
-                    ? (generatedTitle.Length > 100 ? generatedTitle[..100] : generatedTitle)
-                    : (request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content);
-                await _conversationRepository.UpdateTitleAsync(request.ConversationId, finalTitle, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to generate AI title for conversation {Id}", request.ConversationId);
-                var title = request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content;
-                await _conversationRepository.UpdateTitleAsync(request.ConversationId, title, cancellationToken);
-            }
+            var ctx = BuildTitleContext(conversation, request.Content, assistantContent);
+            var generatedTitle = await GenerateTitleAsync(model, ctx, cancellationToken);
+            titleToEmit = generatedTitle
+                ?? (request.Content.Length > 50 ? request.Content[..50] + "..." : request.Content);
+            await _conversationRepository.UpdateTitleAsync(request.ConversationId!.Value, titleToEmit, cancellationToken);
         }
 
-        // Emit sources sentinel for SDK frontend
+        // Emit sentinels last (after all content is streamed)
+        if (titleToEmit != null)
+            yield return $"[TITLE]:{titleToEmit}";
         if (ragResult.Sources.Count > 0)
             yield return $"[SOURCES]:{JsonSerializer.Serialize(ragResult.Sources)}";
+    }
+
+    private bool ShouldGenerateTitle(int messageCountBeforeTurn)
+    {
+        var turnNumber = messageCountBeforeTurn / 2 + 1;
+        if (turnNumber == 1) return true;
+        var interval = _configuration.GetValue<int>("TitleGeneration:TopicChangeInterval", 5);
+        if (interval <= 0) return false;
+        return (turnNumber - 1) % interval == 0;
+    }
+
+    private static string BuildTitleContext(
+        Conversation conversation,
+        string currentUserMessage,
+        string assistantResponse,
+        int maxPriorPairs = 3)
+    {
+        const int maxPerMessage = 500;
+        var sb = new StringBuilder();
+        var prior = conversation.Messages
+            .OrderBy(m => m.Timestamp)
+            .TakeLast(maxPriorPairs * 2)
+            .ToList();
+        foreach (var m in prior)
+        {
+            var c = m.Content.Length > maxPerMessage ? m.Content[..maxPerMessage] + "..." : m.Content;
+            sb.AppendLine($"{(m.Role == "user" ? "User" : "Assistant")}: {c}");
+        }
+        var u = currentUserMessage.Length > maxPerMessage ? currentUserMessage[..maxPerMessage] + "..." : currentUserMessage;
+        var a = assistantResponse.Length > maxPerMessage ? assistantResponse[..maxPerMessage] + "..." : assistantResponse;
+        sb.AppendLine($"User: {u}");
+        sb.Append($"Assistant: {a}");
+        return sb.ToString();
+    }
+
+    private async Task<string?> GenerateTitleAsync(
+        string model,
+        string contextBlock,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var msgs = new List<ChatMessage>
+            {
+                new("system",
+                    "Generate a concise, descriptive title of 5 to 8 words for a chat conversation " +
+                    "based on the exchange provided. Return only the title text with no quotes, " +
+                    "no numbering, and no trailing punctuation."),
+                new("user", contextBlock)
+            };
+            var raw = await _aiProvider.GenerateResponseAsync(msgs, model, cancellationToken);
+            raw = raw.Trim().Trim('"').TrimEnd('.').Trim();
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            return raw.Length > 100 ? raw[..100] : raw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Title generation AI call failed");
+            return null;
+        }
     }
 
     private static string BuildSystemPrompt(

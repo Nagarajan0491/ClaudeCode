@@ -13,4 +13,10 @@ public class Conversation
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public List<Message> Messages { get; set; } = new();
+
+    [MaxLength(100)]
+    public string? HostAppId { get; set; }
+
+    [MaxLength(255)]
+    public string? UserId { get; set; }
 }

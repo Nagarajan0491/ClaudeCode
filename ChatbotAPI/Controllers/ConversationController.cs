@@ -19,9 +19,11 @@ public class ConversationController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ConversationDto>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<ConversationDto>>> GetAll(
+        [FromQuery] string? hostAppId, [FromQuery] string? userId,
+        CancellationToken cancellationToken)
     {
-        var conversations = await _conversationRepository.GetAllAsync(cancellationToken);
+        var conversations = await _conversationRepository.GetAllAsync(hostAppId, userId, cancellationToken);
         var dtos = conversations.Select(c => new ConversationDto
         {
             Id = c.Id,
@@ -62,9 +64,14 @@ public class ConversationController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<ConversationDto>> Create(CancellationToken cancellationToken)
+    public async Task<ActionResult<ConversationDto>> Create(
+        [FromBody] CreateConversationRequest? request,
+        CancellationToken cancellationToken)
     {
-        var conversation = await _conversationRepository.CreateAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(request?.UserId))
+            return BadRequest("UserId is required to create a conversation.");
+
+        var conversation = await _conversationRepository.CreateAsync(request.HostAppId, request.UserId, cancellationToken);
         var dto = new ConversationDto
         {
             Id = conversation.Id,
